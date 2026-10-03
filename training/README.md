@@ -1,6 +1,6 @@
 # Model training and evaluation
 
-`reproduce_training.py` is the public, path-sanitized version of the training/evaluation program used for the bundled four-class rotating-machine model.
+`reproduce_training.py` contains the training/evaluation procedure used for the bundled four-class rotating-machine model.
 
 It uses the repository's `app/replay_data/` recordings and reproduces the same evaluation design:
 

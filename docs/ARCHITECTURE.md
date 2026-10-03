@@ -39,11 +39,11 @@ Motor actions are explicit API operations. The server publishes command messages
 
 ## Demo workspace
 
-The Demo workspace replays bundled CSV recordings through the same telemetry/inference presentation path but cannot invoke physical motor-control endpoints. This keeps a judge-friendly software demonstration separate from real equipment control.
+The Demo workspace replays bundled CSV recordings through the same telemetry/inference presentation path but cannot invoke physical motor-control endpoints. This keeps reproducible software demonstration separate from real equipment control.
 
 ## Model path
 
-`app/ai_model.py` implements the inference-side feature extraction expected by the bundled model. The public training/evaluation implementation is in `training/reproduce_training.py`.
+`app/ai_model.py` implements the inference-side feature extraction expected by the bundled model. The training/evaluation implementation is in `training/reproduce_training.py`.
 
 ## Storage
 
@@ -59,7 +59,7 @@ Raw recording files generated at runtime are stored outside the source tree unde
 
 The default Compose configuration keeps anonymous MQTT port 1883 inside the Docker network. The externally published physical listener uses port 8883 and expects credentials plus TLS materials that are intentionally not committed.
 
-Public-repository guardrails reject common secret/private-key patterns, user-home paths, database files, archives, and oversized GitHub files before push.
+Repository guardrails reject common secret/private-key patterns, user-home paths, database files, archives, and oversized GitHub files before changes are published.
 
 ## Industrial-safety boundary
 

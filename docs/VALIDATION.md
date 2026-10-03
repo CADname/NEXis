@@ -1,51 +1,49 @@
-# Public package validation
+# Repository verification
 
-This document records the checks used to prepare the general-purpose public GitHub package.
+The repository includes automated checks for source integrity, evaluation consistency, credential hygiene, and basic syntax.
 
-## Source/package checks
+## Source checks
 
-- All operator-facing UI text, source comments/messages, documentation, and labeled repository figures are English-only.
-- Kept all 225 physical replay CSV files and the sanitized bundled RandomForest model used by the application.
-- Included figures that directly document the current system: sensor layout, physical fault examples, ML pipeline, and file-level confusion matrix.
-- Added the path-sanitized training/evaluation source and committed evaluation outputs so the reported metric has an inspectable procedure and per-file evidence.
-- Dataset filenames use the corrected measurement dates: Normal/Misalignment on 2026-10-02 and Unbalance/Looseness on 2026-10-03. Only filename/date labels were corrected; the CSV sensor payloads were not altered.
+The repository guard verifies that:
 
-## Evaluation consistency
+- no Hangul text is present in text/code files intended for the English repository;
+- common private-key, access-token, local-user-path, database, and archive patterns are rejected;
+- runtime caches and generated artifacts are not committed;
+- required model, evidence, training, and configuration-template files are present;
+- placeholder credentials remain placeholders in `.env.example`;
+- internal presentation/planning language is not present in Markdown documentation.
 
-`python scripts/validate_evidence.py` verifies:
+Run:
 
-- exactly 225 CSV recordings;
-- class counts: normal 72, unbalance 10, misalignment 63, looseness 80;
-- required CSV schema and at least one 256-sample model window per file;
-- file confusion matrix total 225 with 217 correct;
-- the committed RandomForest metric row matches the reference values.
+```bash
+python scripts/repository_check.py
+```
 
-The reference model-selection procedure is leave-one-file-out validation. One complete recording is held out in each fold; windows from that file do not enter that fold's training data.
+## Evidence checks
 
-## Privacy/security checks
+The evidence validator confirms that the committed dataset and evaluation outputs agree with the stated reference metrics.
 
-- Local workstation path metadata was removed from the bundled `.joblib` file and replaced with `app/replay_data`.
-- Serial-console disclosure of `WIFI_SETUP_AP_PASSWORD` was removed from the ESP32 firmware.
-- Empty/placeholder administrator credentials are rejected and `prepare.sh` rejects placeholder administrator/PostgreSQL passwords.
-- `COOKIE_SECURE=true` can be enabled for HTTPS deployments.
-- The public package excludes `.env`, `secrets.h`, MQTT password files, TLS private keys, SSH material, database dumps, shell history, and deployment backup archives.
-- The pre-push guard checks common credential patterns, private keys, local-user paths, forbidden public artifacts, and near-GitHub-limit files.
+Run:
 
-## Syntax and smoke checks
-
-The release is validated with:
-
-```text
-python scripts/public_repo_check.py
+```bash
 python scripts/validate_evidence.py
-python -m py_compile app/main.py app/ai_model.py scripts/public_repo_check.py scripts/validate_evidence.py training/reproduce_training.py
+```
+
+The reference dataset contains **225 recordings**, and the committed file-level validation contains **217 correct predictions out of 225**, corresponding to **96.44% file-level accuracy**.
+
+## Syntax checks
+
+The CI workflow also performs:
+
+```bash
+python -m py_compile app/main.py app/ai_model.py scripts/repository_check.py scripts/validate_evidence.py training/reproduce_training.py
 node --check app/web/assets/app.js
 node --check app/web/assets/digital_twin.js
 bash -n prepare.sh
 ```
 
-A model-load/inference smoke test is also run against one 256-sample recording window from each of the four classes. The package is then ZIP-tested for archive integrity.
+## Credential handling
 
-## Deployment boundary
+The repository intentionally excludes live `.env` files, `secrets.h`, MQTT password files, TLS private keys, SSH material, database dumps, shell history, and deployment backup archives.
 
-The full Docker application still requires local administrator/database credentials, MQTT credentials, and TLS certificates. Those are intentionally absent from the public package. This repository is an engineering prototype and not a certified machinery-safety system.
+The full application still requires local administrator/database credentials, MQTT credentials, and TLS certificates at deployment time. NEXis is an engineering prototype and not a certified machinery-safety system.

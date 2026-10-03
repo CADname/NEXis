@@ -21,7 +21,7 @@ The goal is not another generic condition-monitoring dashboard. The goal is a co
 |---:|---:|---:|---:|
 | Physical recordings | Correct LOFO files | File-level accuracy | Vibration + Current + RPM |
 
-**Quick judge links:** [Evidence](docs/EVIDENCE.md) · [3–5 min demo guide](docs/DEMO_GUIDE.md) · [Architecture](docs/ARCHITECTURE.md) · [Reproduce training](training/README.md)
+**Quick links:** [Evidence](docs/EVIDENCE.md) · [3–5 min demo guide](docs/DEMO_GUIDE.md) · [Architecture](docs/ARCHITECTURE.md) · [Reproduce training](training/README.md)
 
 ## The inspection workflow
 
@@ -61,7 +61,7 @@ NEXis turns that short run into a repeatable inspection signal. Instead of showi
 | Browser digital twin | **Implemented** |
 | 4-class Normal / Unbalance / Misalignment / Looseness diagnosis | **Implemented** |
 
-The strongest validated claim in this repository is the **sensor-based spin-inspection workflow above**. Roadmap ideas such as Vision setup verification, configurable inspection recipes, baseline anomaly detection for unseen assets, and generalized edge connectors are intentionally separated from implemented evidence.
+The strongest validated claim in this repository is the **sensor-based spin-inspection workflow above**. Potential extensions such as vision-based setup verification, configurable inspection recipes, baseline anomaly detection for unseen assets, and generalized edge connectors are intentionally separated from the implemented core.
 
 ## Physical prototype
 
@@ -129,7 +129,7 @@ The model-selection run compared RandomForest and ExtraTrees. `RandomForest_fast
   <img src="docs/images/confusion_matrix.png" alt="NEXis 225-file leave-one-file-out confusion matrix" width="610">
 </p>
 
-Raw evaluation outputs are committed under [`docs/evaluation/`](docs/evaluation/), including per-file predictions, per-window predictions, classification reports, feature importance, and model-selection results. The public training program is in [`training/reproduce_training.py`](training/reproduce_training.py).
+Raw evaluation outputs are committed under [`docs/evaluation/`](docs/evaluation/), including per-file predictions, per-window predictions, classification reports, feature importance, and model-selection results. The training program is in [`training/reproduce_training.py`](training/reproduce_training.py).
 
 > **Metric scope:** these results measure the supplied prototype dataset and operating setup. They are not evidence that the same classifier can identify the same faults on an arbitrary unseen machine without machine-specific validation.
 
@@ -168,7 +168,7 @@ Two workspaces intentionally separate real hardware from demonstration data:
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the implementation map.
 
-## The 60-second judge view
+## 60-second system walkthrough
 
 1. **Show the real rig first.** Make the physical motor/shaft assembly visible before opening dashboards.
 2. **Start a controlled run.** Make it obvious that the telemetry comes from the moving hardware.
@@ -177,9 +177,8 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the implementation map.
 5. **Show the evidence:** 225 physical recordings, 217/225 correct LOFO files, 96.44% file accuracy.
 6. **Only then show architecture and expansion.**
 
-For a 2–5 minute submission video, use [`docs/DEMO_GUIDE.md`](docs/DEMO_GUIDE.md).
+For a 2–5 minute technical demo, use [`docs/DEMO_GUIDE.md`](docs/DEMO_GUIDE.md).
 
-> **Best visual upgrade before a final submission:** replace the static hero photo with a real 5–8 second GIF/video clip showing **rig starts → RPM rises → telemetry moves → diagnosis appears**. Do not use a synthetic or staged software-only animation as a substitute for the physical demo.
 
 ## From one validated station to a configurable inspection system
 
@@ -206,7 +205,7 @@ Generalized edge connectors
   → expand beyond the current ESP32/MQTT reference node
 ```
 
-These extensions should be added to the project page only when they are actually implemented and demonstrable in the submitted branch.
+These extensions are future directions and should be presented as implemented only after they are built and validated.
 
 ## Repository layout
 
@@ -220,24 +219,21 @@ app/
 firmware/
   NEXis_ESP32_AWS_Physical_v1_4_0/
 training/
-  reproduce_training.py     Public LOFO training/evaluation program
+  reproduce_training.py     LOFO training/evaluation program
   README.md
 docs/
   EVIDENCE.md               Claims, metrics and limitations
   ARCHITECTURE.md           Implementation map
-  DEMO_GUIDE.md             2–5 minute generic demo storyboard
-  HACKATHON_ADAPTATION.md   Track-specific adaptation without changing the core claim
-  SUBMISSION_CHECKLIST.md   Reusable submission checklist
-  HACKATHON_DISCLOSURE_TEMPLATE.md
-  SUBMISSION_TEXT_TEMPLATE.md  Reusable project-page copy
-  JUDGE_QA.md                  Grounded answers to common technical questions
+  DEMO_GUIDE.md             2–5 minute system demo sequence
+  TECHNICAL_QA.md           Technical scope and limitations
+  VALIDATION.md             Repository verification checks
   evaluation/               Raw evaluation reports
   images/                   Hardware, fault and model figures
 scripts/
-  public_repo_check.py      Secret/publication guard
+  repository_check.py       Repository safety and consistency guard
   validate_evidence.py      Dataset/evaluation consistency check
 .github/workflows/
-  public-repo-check.yml
+  repository-check.yml
 ```
 
 ## Quick start
@@ -285,7 +281,7 @@ The supplied Docker Compose stack starts FastAPI, PostgreSQL, Mosquitto, and Ngi
 Run lightweight repository checks:
 
 ```bash
-python scripts/public_repo_check.py
+python scripts/repository_check.py
 python scripts/validate_evidence.py
 ```
 
@@ -295,23 +291,15 @@ To reproduce the full model-selection/evaluation process:
 python training/reproduce_training.py
 ```
 
-Full LOFO training is CPU-intensive because it repeatedly fits ensemble models. The committed evaluation CSVs are provided so judges can inspect the reference results without waiting for a complete rerun.
+Full LOFO training is CPU-intensive because it repeatedly fits ensemble models. The committed evaluation CSVs allow the recorded results to be inspected without waiting for a complete rerun.
 
 ## Security and safety notes
 
 - No intended production passwords, private TLS keys, shell history, database dumps, or local-user paths are included.
-- The ESP32 setup AP password is not printed to the serial console in this public version.
+- The ESP32 setup AP password is not printed to the serial console by the included firmware.
 - The anonymous MQTT listener on port 1883 remains internal to the Compose network; the physical-device listener is TLS/authenticated on 8883.
 - The included Nginx configuration listens on HTTP port 80. Use HTTPS termination for an Internet-facing deployment.
 - NEXis is an engineering prototype, **not a certified machine-safety system**. Browser/MQTT control must not be the sole safety layer around hazardous machinery.
 - Guest Demo sessions are separated from the Physical workspace and cannot use physical-control endpoints.
 
 See [`SECURITY.md`](SECURITY.md).
-
-## Reusing NEXis across hackathons
-
-Keep this repository's core claim stable: **a real, evidence-backed end-of-line spin-inspection workflow**. For a sponsor or specialist track, add a genuine new module around that core rather than renaming an unrelated project.
-
-Examples include a Physical-AI reasoning layer, an inspection agent, a vision setup validator, a DevSecOps automation layer, or a SaaS deployment layer. [`docs/HACKATHON_ADAPTATION.md`](docs/HACKATHON_ADAPTATION.md) explains how to do this without implying that roadmap features already exist.
-
-If a competition asks teams to identify work completed during the event, use [`docs/HACKATHON_DISCLOSURE_TEMPLATE.md`](docs/HACKATHON_DISCLOSURE_TEMPLATE.md) to distinguish the base repository from event-built additions. Always follow the specific event rules.

@@ -1,6 +1,6 @@
 # NEXis evidence and claim boundary
 
-This document separates what the public repository directly demonstrates from what is only a product direction.
+This document separates what the repository directly demonstrates from future product directions.
 
 ## 1. Demonstrated physical system
 
@@ -13,7 +13,7 @@ The current reference rig is a rotating-drive testbed with:
 - BTS7960 motor driver
 - DC motor, shaft, support/bearing components, and rotating disk/load hardware
 
-The public firmware streams vibration, current, RPM/control information and accepts bounded remote motor commands.
+The included firmware streams vibration, current, RPM/control information and accepts bounded remote motor commands.
 
 ## 2. Supplied dataset
 
@@ -27,7 +27,7 @@ The repository contains 225 labeled physical recordings in `app/replay_data/`.
 | looseness | 80 |
 | **total** | **225** |
 
-The dataset is imbalanced, particularly for `unbalance`, and that limitation should be disclosed in any evaluation discussion.
+The dataset is imbalanced, particularly for `unbalance`, and that limitation should be considered when interpreting the metrics.
 
 ## 3. Feature and decision pipeline
 
@@ -56,7 +56,7 @@ For every recording:
 4. combine those window predictions into one file-level decision;
 5. repeat for all 225 files.
 
-This prevents windows from the same held-out recording appearing in both train and test for that fold. It does not, however, prove generalization to different machines, different sensors, different mounting conditions, or a different operating regime.
+This prevents windows from the same held-out recording appearing in both train and test for that fold. It does not prove generalization to different machines, different sensors, different mounting conditions, or a different operating regime.
 
 ## 5. Recorded model-selection result
 
@@ -80,7 +80,7 @@ Per-class file-level results are committed in `docs/evaluation/file_classificati
 
 ## 6. Runtime evidence
 
-The public application contains:
+The application contains:
 
 - MQTT ingestion for the physical device
 - PostgreSQL telemetry/prediction/recording tables
@@ -92,7 +92,7 @@ The public application contains:
 - browser operations interface
 - digital-twin synchronization
 
-## 7. Claims that are intentionally **not** made
+## 7. Claim limits
 
 The current repository does not establish that:
 
@@ -103,16 +103,16 @@ The current repository does not establish that:
 - arbitrary industrial sensors are automatically discovered and normalized;
 - an unseen machine can immediately receive named fault diagnosis without relevant data.
 
-These distinctions are important for credible hackathon and technical-review submissions.
+These limits keep the demonstrated result separate from broader product possibilities.
 
-## 8. Roadmap claims
+## 8. Future directions
 
-Reasonable next steps, provided they are implemented and evaluated, include:
+Potential next steps, provided they are implemented and evaluated, include:
 
 - camera-based measurement-setup verification before spin testing;
 - configurable inspection recipes binding physical component, sensor stream, and optional visual ROI;
 - normal-baseline anomaly detection for new assets without labeled fault data;
 - generalized edge connectors beyond the current ESP32/MQTT node;
-- agentic workflows that explain a failed inspection or automate follow-up engineering actions.
+- automated workflows that explain a failed inspection or trigger follow-up engineering actions.
 
-Roadmap items should be labeled as future work until a corresponding implementation is present in the submitted code and demo.
+These items remain future directions until a corresponding implementation and validation are present.

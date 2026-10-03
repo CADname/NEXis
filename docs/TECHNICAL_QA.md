@@ -1,4 +1,4 @@
-# Judge Q&A preparation
+# Technical Q&A
 
 ## What is NEXis in one sentence?
 
@@ -26,32 +26,30 @@ No. It proves performance on the supplied prototype dataset under its measured o
 
 ## Why RandomForest instead of a deep model?
 
-For this prototype dataset, engineered time/frequency/current/control features with an ensemble classifier provide a compact and interpretable baseline that is inexpensive to run. The novelty claim is the **end-to-end physical inspection workflow**, not RandomForest itself.
+For this prototype dataset, engineered time/frequency/current/control features with an ensemble classifier provide a compact and interpretable baseline that is inexpensive to run. The engineering value is the **end-to-end physical inspection workflow**, not RandomForest by itself.
 
-## What is innovative here?
+## What is the key engineering contribution?
 
 The useful combination is the workflow: a controlled physical spin test, synchronized multi-sensor evidence, file-level validation, fault diagnosis, replayable data, and a browser result path aimed at catching dynamic assembly issues before shipment.
 
-## Why not make Vision AI the main feature?
+## Why is vision not part of the demonstrated core?
 
-The strongest current evidence is the sensor-based spin diagnosis. Vision is more valuable as a **measurement-quality gate** — for example, verifying that sensors or fixtures are positioned correctly before a spin test — and should stay a roadmap/event-specific module until it is implemented in the submitted branch.
+The strongest current evidence is the sensor-based spin diagnosis. Vision-based setup verification is a possible extension, but it should be treated separately until it is implemented and validated in the same end-to-end workflow.
 
 ## How can this scale to other machines?
 
-The safe path is not to claim that the existing four-class classifier transfers unchanged. A scalable product can add configurable recipes, generalized edge connectors, normal-baseline anomaly detection, and then asset-specific diagnosis once relevant labeled data exists.
+The safe path is not to claim that the existing four-class classifier transfers unchanged. A scalable system can add configurable recipes, generalized edge connectors, normal-baseline anomaly detection, and then asset-specific diagnosis once relevant labeled data exists.
 
 ## What happens if the network fails?
 
-The public architecture is a prototype and should not be treated as a safety controller. Industrial deployment should add explicit offline behavior, local safeguards, retries/buffering, health monitoring, and independent hardware safety controls.
+The current architecture is a prototype and should not be treated as a safety controller. Industrial deployment should add explicit offline behavior, local safeguards, retries/buffering, health monitoring, and independent hardware safety controls.
 
-## What would you build next?
+## What would be built next?
 
-The next product layer is measurement-setup validation plus repeatable inspection recipes. For sponsor-specific hackathons, an agent, vision component, cloud deployment, or DevSecOps automation can be added around the validated spin-test core if it performs a real measurable function.
+The next product layer is measurement-setup validation plus repeatable inspection recipes, followed by broader edge connectivity and machine-specific validation workflows.
 
-## What should judges remember after the demo?
-
-Three things:
+## What are the three main takeaways?
 
 1. **It is a real physical test, not only a dashboard.**
 2. **The result is backed by 225 recordings and 217/225 LOFO-correct files.**
-3. **The current claim is narrow and demonstrated; broader FlexInspect capabilities are a roadmap, not a hidden overclaim.**
+3. **The demonstrated claim is deliberately scoped to the measured prototype setup.**

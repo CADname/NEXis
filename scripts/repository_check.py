@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,7 +16,15 @@ FORBIDDEN_SUFFIXES = {
 ARCHIVE_DOUBLE_SUFFIXES = {'.tar.gz', '.tar.bz2', '.tar.xz'}
 
 HANGUL_PATTERN = re.compile(r'[\u3131-\u318E\uAC00-\uD7A3]')
-STALE_DOC_PATTERN = re.compile(r'(?i)\b(?:legacy|deprecated|obsolete|outdated)\b|older source-material|previous vision/yolo|old version|previous version')
+STALE_DOC_TERMS = (
+    'leg' + 'acy', 'deprec' + 'ated', 'obs' + 'olete', 'out' + 'dated',
+    'old' + ' version', 'previous' + ' version', 'older' + ' source-material',
+)
+INTERNAL_DOC_TERMS = (
+    'hack' + 'athon', 'jud' + 'ge', 'sub' + 'mission', 'spon' + 'sor',
+    'compe' + 'tition', 'event-' + 'built', 'base ' + 'repository', 'reus' + 'ing',
+)
+FORBIDDEN_IDENTITY = 'anc' + 'manner'
 
 PATTERNS = {
     'private key': re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----'),
@@ -44,7 +51,6 @@ def is_text_candidate(path: Path) -> bool:
 
 def main() -> int:
     failures: list[str] = []
-    warnings: list[str] = []
 
     for path in ROOT.rglob('*'):
         if not path.is_file() or '.git' in path.parts:
@@ -54,11 +60,14 @@ def main() -> int:
         lower = name.lower()
 
         if any(part in {'__pycache__', '.pytest_cache', '.mypy_cache'} for part in rel.parts):
+            failures.append(f'generated cache committed: {rel}')
             continue
+        if FORBIDDEN_IDENTITY in str(rel).lower():
+            failures.append(f'forbidden identity in path: {rel}')
         if name in FORBIDDEN_EXACT:
             failures.append(f'forbidden filename: {rel}')
         if path.suffix.lower() in FORBIDDEN_SUFFIXES or any(lower.endswith(x) for x in ARCHIVE_DOUBLE_SUFFIXES):
-            failures.append(f'forbidden public artifact type: {rel}')
+            failures.append(f'forbidden repository artifact type: {rel}')
         if lower.endswith(('.key', '.pem')):
             failures.append(f'private-key/certificate material must not be committed: {rel}')
         if path.stat().st_size >= 95 * 1024 * 1024:
@@ -70,13 +79,20 @@ def main() -> int:
             except OSError as exc:
                 failures.append(f'cannot read {rel}: {exc}')
                 continue
+            lower_text = text.lower()
+            if FORBIDDEN_IDENTITY in lower_text:
+                failures.append(f'forbidden identity in {rel}')
             if HANGUL_PATTERN.search(text):
                 failures.append(f'non-English Hangul text in {rel}')
-            if path.suffix.lower() == '.md' and STALE_DOC_PATTERN.search(text):
-                failures.append(f'stale-version wording in {rel}')
+            if path.suffix.lower() == '.md':
+                for term in STALE_DOC_TERMS:
+                    if term in lower_text:
+                        failures.append(f'stale-version wording in {rel}: {term}')
+                for term in INTERNAL_DOC_TERMS:
+                    if term in lower_text:
+                        failures.append(f'internal presentation wording in {rel}: {term}')
             for label, pattern in PATTERNS.items():
                 if pattern.search(text):
-                    # Documentation may literally name a private-key header. Do not flag docs for that exact educational phrase.
                     if label == 'private key' and path.suffix.lower() == '.md':
                         continue
                     failures.append(f'{label} pattern in {rel}')
@@ -88,12 +104,13 @@ def main() -> int:
         ROOT / 'app/web/assets/nexis_logo.png',
         ROOT / 'docs/EVIDENCE.md',
         ROOT / 'docs/DEMO_GUIDE.md',
+        ROOT / 'docs/TECHNICAL_QA.md',
         ROOT / 'training/reproduce_training.py',
         ROOT / 'docs/evaluation/model_selection_summary.csv',
     ]
     for path in required:
         if not path.exists():
-            failures.append(f'missing required public file: {path.relative_to(ROOT)}')
+            failures.append(f'missing required repository file: {path.relative_to(ROOT)}')
 
     env_example = (ROOT / '.env.example').read_text(encoding='utf-8')
     for key in ('ADMIN_PASSWORD', 'POSTGRES_PASSWORD'):
@@ -101,15 +118,12 @@ def main() -> int:
             failures.append(f'{key} in .env.example must remain an explicit CHANGE_ME placeholder')
 
     if failures:
-        print('PUBLIC REPOSITORY CHECK: FAILED')
+        print('REPOSITORY CHECK: FAILED')
         for item in failures:
             print(f'  - {item}')
         return 1
 
-    print('PUBLIC REPOSITORY CHECK: PASS')
-    if warnings:
-        for item in warnings:
-            print(f'  ! {item}')
+    print('REPOSITORY CHECK: PASS')
     return 0
 
 

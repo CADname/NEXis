@@ -951,7 +951,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 void publishControlStatus(const char* reason) {
   if (!mqttClient.connected()) return;
   String payload; payload.reserve(420);
-  payload += "{\"asset_id\":\"rotor_rig_01\",\"site_id\":\"hackathon\",\"remote_enabled\":";
+  payload += "{\"asset_id\":\"rotor_rig_01\",\"site_id\":\"nexis_lab\",\"remote_enabled\":";
   payload += remoteControlEnabled ? "true" : "false";
   payload += ",\"remote_active\":"; payload += remoteControlActive ? "true" : "false";
   payload += ",\"target_rpm\":" + String(targetRPM);
@@ -966,7 +966,7 @@ void publishControlStatus(const char* reason) {
 void publishCloudHealth() {
   if (!mqttClient.connected()) return;
   String payload; payload.reserve(320);
-  payload += "{\"asset_id\":\"rotor_rig_01\",\"site_id\":\"hackathon\",\"state\":\"ONLINE\",\"hostname\":\"esp32\",\"mqtt_connected\":true";
+  payload += "{\"asset_id\":\"rotor_rig_01\",\"site_id\":\"nexis_lab\",\"state\":\"ONLINE\",\"hostname\":\"esp32\",\"mqtt_connected\":true";
   payload += ",\"wifi_rssi\":" + String(WiFi.RSSI()) + ",\"uptime_ms\":" + String(millis());
   payload += ",\"firmware\":\"NEXis-AWS-Physical-v1.4.0\"}";
   String topic = mqttTopic("/health"); mqttClient.publish(topic.c_str(), payload.c_str(), false);
@@ -989,7 +989,7 @@ void flushCloudTelemetry() {
   if (mqttBatchCount <= 0) return;
   if (!mqttClient.connected()) { mqttBatchBody = ""; mqttBatchCount = 0; return; }
   String payload; payload.reserve(mqttBatchBody.length() + 180);
-  payload += "{\"asset_id\":\"rotor_rig_01\",\"site_id\":\"hackathon\",\"batch_seq\":" + String(mqttBatchSeq++);
+  payload += "{\"asset_id\":\"rotor_rig_01\",\"site_id\":\"nexis_lab\",\"batch_seq\":" + String(mqttBatchSeq++);
   payload += ",\"sample_count\":" + String(mqttBatchCount) + ",\"samples\":[" + mqttBatchBody + "]}";
   String topic = mqttTopic("/telemetry/batch");
   if (!mqttClient.publish(topic.c_str(), payload.c_str(), false)) Serial.println("# MQTT_TELEMETRY_BATCH_PUBLISH_FAILED");
@@ -1632,7 +1632,7 @@ void updateBestCandidate(float pwmEq, float avgRPM) {
     Serial.print(" ERR=");
     Serial.println(bestAbsError, 1);
   } else {
-    Serial.print("# BEST_KEEP_PREVIOUS_STRICT_MIN_ERROR CURRENT_PWM=");
+    Serial.print("# BEST_KEEP_CURRENT_STRICT_MIN_ERROR CURRENT_PWM=");
     Serial.print(pwmEq, 2);
     Serial.print(" CURRENT_ERR=");
     Serial.print(err, 1);
