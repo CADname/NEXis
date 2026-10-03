@@ -1,0 +1,70 @@
+name: nexis-industrial-ops
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_DSN: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      MQTT_HOST: ${MQTT_HOST:-mqtt}
+      MQTT_PORT: ${MQTT_PORT:-1883}
+      MQTT_TOPIC: ${MQTT_TOPIC:-nexis/esp32/#}
+      MQTT_DEVICE_ID: ${MQTT_DEVICE_ID:-rotor_rig_01}
+      REMOTE_RPM_MIN: ${REMOTE_RPM_MIN:-100}
+      REMOTE_RPM_MAX: ${REMOTE_RPM_MAX:-1500}
+      REMOTE_ARM_SECONDS: ${REMOTE_ARM_SECONDS:-60}
+      CONTROL_COMMAND_TTL_MS: ${CONTROL_COMMAND_TTL_MS:-5000}
+      EDGE_ONLINE_TIMEOUT_MS: ${EDGE_ONLINE_TIMEOUT_MS:-8000}
+      PHYSICAL_AI_MIN_RPM_RATIO: ${PHYSICAL_AI_MIN_RPM_RATIO:-0.70}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      RECORDING_ROOT: /runtime/recordings
+    volumes:
+      - ./runtime:/runtime
+    depends_on:
+      db:
+        condition: service_healthy
+      mqtt:
+        condition: service_started
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/passwd:/mosquitto/config/passwd:ro
+      - ./mosquitto/certs:/mosquitto/config/certs:ro
+      - mqtt_data:/mosquitto/data
+    ports:
+      - "8883:8883"
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+
+volumes:
+  postgres_data:
+  mqtt_data:

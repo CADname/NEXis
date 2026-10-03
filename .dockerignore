@@ -1,0 +1,17 @@
+.git
+.github
+.env
+.env.*
+**/secrets.h
+mosquitto/passwd
+mosquitto/certs/*.key
+mosquitto/certs/*.pem
+mosquitto/certs/*.crt
+runtime
+*.log
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+__pycache__
+*.pyc

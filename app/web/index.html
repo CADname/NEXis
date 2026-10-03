@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NEXis · AI End-of-Line Spin Inspection</title>
+<link rel="stylesheet" href="/assets/dashboard.css">
+</head>
+<body>
+<div id="login" class="login-screen workspace-login-screen">
+  <div class="login-console">
+    <header class="login-console-head">
+      <div class="login-brand-lockup"><img src="/assets/nexis_logo.png" alt="NEXis"><div><b>NEXis</b><span>AI END-OF-LINE SPIN INSPECTION</span></div></div>
+      <div class="login-system-badge"><i></i>AWS SYSTEM READY</div>
+    </header>
+    <div class="workspace-selector">
+      <section class="workspace-selector-copy">
+        <span class="section-kicker">SELECT WORKSPACE</span>
+        <h1>Select an operating workspace.</h1>
+        <p>The physical station and recorded demo are isolated from login onward.</p>
+        <div class="selector-facts"><span>ESP32 LIVE</span><span>4-Class AI</span><span>Digital Twin</span><span>100 Hz</span></div>
+      </section>
+      <section class="workspace-card physical-entry">
+        <div class="workspace-card-head"><span class="workspace-code">01</span><div><small>PHYSICAL LINE</small><h2>PHYSICAL STATION</h2></div><span class="status-lamp ok"><i></i>READY</span></div>
+        <p>Live ESP32 sensors, motor control, real-time AI diagnosis, and an RPM-synchronized digital twin.</p>
+        <div class="workspace-path"><span>ESP32</span><b>→</b><span>MQTT TLS</span><b>→</b><span>AWS</span><b>→</b><span>AI</span></div>
+        <form id="physicalLoginForm" class="industrial-login-form">
+          <label><span>USER ID</span><input id="physicalUsername" value="admin" autocomplete="username"></label>
+          <label><span>PASSWORD</span><input id="physicalPassword" type="password" value="" autocomplete="current-password"></label>
+          <button class="op-button primary wide" type="submit">Open Physical Station</button>
+        </form>
+        <div id="physicalLoginError" class="form-error"></div>
+      </section>
+      <section class="workspace-card demo-entry">
+        <div class="workspace-card-head"><span class="workspace-code">02</span><div><small>DEMO LINE</small><h2>RECORDED DEMO</h2></div><span class="status-lamp info"><i></i>READY</span></div>
+        <p>Replay recorded CSV data with AI diagnosis and a digital twin, fully isolated from physical motor control.</p>
+        <div class="workspace-path"><span>CSV</span><b>→</b><span>100 Hz</span><b>→</b><span>AI</span><b>→</b><span>TWIN</span></div>
+        <form id="demoLoginForm" class="industrial-login-form">
+          <label><span>USER ID</span><input id="demoUsername" value="admin" autocomplete="username"></label>
+          <label><span>PASSWORD</span><input id="demoPassword" type="password" value="" autocomplete="current-password"></label>
+          <button class="op-button primary wide" type="submit">Open Admin Demo</button>
+        </form>
+        <button id="guestDemoBtn" class="op-button secondary wide" type="button">Open Guest Demo</button>
+        <div id="demoLoginError" class="form-error"></div>
+      </section>
+    </div>
+    <footer class="login-console-foot"><span>NEXis End-of-Line Inspection Console</span><span>Physical / Demo workspace isolation enabled</span></footer>
+  </div>
+</div>
+
+<div id="app" class="app hidden">
+  <header class="topbar">
+    <div class="top-brand"><img src="/assets/nexis_logo.png" alt="NEXis"><div><b>NEXis</b><span>END-OF-LINE INSPECTION</span></div></div>
+    <div class="top-status"><span id="systemOnlineLabel" class="system-online"><i></i>CLOUD CONNECTED</span><span id="sourceChip" class="workspace-badge">WORKSPACE</span><span id="clock" class="clock">—</span></div>
+    <div class="account"><span id="avatar" class="avatar">A</span><div><b id="accountName">admin</b><small id="accountRole">ADMIN</small></div><button id="logoutBtn" class="plain-button">Sign Out</button></div>
+  </header>
+
+  <aside class="sidebar">
+    <div class="side-section-label">INSPECTION</div>
+    <nav>
+      <button class="nav-item" data-page="physical" data-workspace-only="physical"><span class="nav-glyph">▣</span><span>Live Inspection</span></button>
+      <button class="nav-item" data-page="demo" data-workspace-only="demo"><span class="nav-glyph">▶</span><span>Recorded Demo</span></button>
+      <button class="nav-item" data-page="ai"><span class="nav-glyph">AI</span><span>AI Diagnosis</span></button>
+      <button class="nav-item" data-page="recordings"><span class="nav-glyph">REC</span><span>Data Recording</span></button>
+      <button class="nav-item" data-page="twin"><span class="nav-glyph">3D</span><span>Digital Twin</span></button>
+      <button class="nav-item" data-page="logs"><span class="nav-glyph">LOG</span><span>Event Log</span></button>
+    </nav>
+    <div class="sidebar-health"><small>SYSTEM LINK</small><b><i></i><span id="sideStatus">Cloud connected</span></b></div>
+  </aside>
+
+  <main class="main">
+    <div class="page-header"><div><span class="section-kicker">NEXis / INSPECTION</span><h1 id="pageTitle">Live Inspection</h1><p id="pageSubtitle">Monitor the physical inspection station in real time.</p></div></div>
+
+    <section id="physical" class="page" data-workspace-only="physical">
+      <div class="ops-commandbar">
+        <div class="line-identity"><span class="line-code">LINE 01</span><div><b>Rotating Module Inspection Station</b><small>ESP32 · ADXL345 · ACS712 · Hall</small></div></div>
+        <div class="monitor-box"><div><small>MONITORING</small><b id="pMonitorState" class="status-value">Stopped</b></div><button id="physicalMonitorStart" class="op-button success">Start Monitoring</button><button id="physicalMonitorStop" class="op-button danger" disabled>Stop</button></div>
+      </div>
+
+      <div class="industrial-kpi-grid">
+        <article class="industrial-kpi"><small>EDGE LINK</small><div class="kpi-line"><b id="pLinkState" class="status-value">OFFLINE</b><span class="kpi-unit">ESP32</span></div><em id="ctrlLastSeen">Waiting for data</em></article>
+        <article class="industrial-kpi"><small>ACTUAL SPEED</small><div class="kpi-line"><b id="pRpm">—</b><span class="kpi-unit">RPM</span></div><em>Hall sensor</em></article>
+        <article class="industrial-kpi"><small>VIBRATION RMS</small><div class="kpi-line"><b id="pRms">—</b><span class="kpi-unit">g</span></div><em>Latest 256 samples</em></article>
+        <article class="industrial-kpi"><small>MOTOR CURRENT</small><div class="kpi-line"><b id="pCurrent">—</b><span class="kpi-unit">A</span></div><em>ACS712</em></article>
+        <article class="industrial-kpi condition-kpi"><small>AI CONDITION</small><div class="kpi-line"><b id="pDiagnosis" class="status-value">Waiting for operating conditions</b></div><em id="pDiagnosisText">Waiting for AI window</em></article>
+        <article class="industrial-kpi"><small>SAMPLES</small><div class="kpi-line"><b id="pSamples">0</b><span class="kpi-unit">rows</span></div><em id="pLastUpdate">—</em></article>
+      </div>
+
+      <div class="ops-layout-primary">
+        <article class="panel signal-panel">
+          <div class="panel-head"><div><small>SIGNAL TREND</small><h3>Live 3-Axis Vibration</h3></div><div class="legend"><span><i class="lx"></i>X</span><span><i class="ly"></i>Y</span><span><i class="lz"></i>Z</span></div></div>
+          <div class="chart-wrap industrial-chart"><canvas id="pWaveChart"></canvas></div>
+        </article>
+
+        <div class="ops-side-stack">
+          <article class="panel control-panel">
+            <div class="panel-head"><div><small>DRIVE CONTROL</small><h3>Motor Control</h3></div><span id="ctrlEdgeChip" class="control-chip offline">ESP32 OFFLINE</span></div>
+            <div class="control-main">
+              <label class="rpm-setpoint"><span>Target Speed</span><div><input id="ctrlRpmInput" type="number" min="100" max="1500" step="1" value="500"><b>RPM</b></div></label>
+              <div class="control-actions"><button id="ctrlStartBtn" class="machine-button start" type="button"><span>▶</span>Start</button><button id="ctrlStopBtn" class="machine-button stop" type="button"><span>■</span>Stop</button></div>
+            </div>
+            <div class="control-readback">
+              <div><small>ACTUAL</small><b id="ctrlActual">—</b></div><div><small>TARGET</small><b id="ctrlTarget">—</b><span id="ctrlRpmError">Error —</span></div><div><small>MODE</small><b id="ctrlMode">IDLE</b></div>
+              <div><small>PWM</small><b id="ctrlPwm">—</b><span id="ctrlDuty">Duty —</span></div><div><small>CURRENT</small><b id="ctrlCurrent">—</b><span id="ctrlAcs">ACS —</span></div><div><small>EDGE</small><b id="ctrlEdge">OFFLINE</b></div>
+            </div>
+            <div id="ctrlMessage" class="control-message">Waiting for the ESP32 connection.</div>
+          </article>
+
+          <article class="panel ai-quick-panel">
+            <div class="panel-head"><div><small>AI DIAGNOSIS</small><h3>Condition Diagnosis</h3></div><span id="pAiState" class="status-tag warning">Waiting for operating conditions</span></div>
+            <div id="pProbabilities" class="prob-list compact-prob"></div>
+            <div class="ai-gate-row"><span>AI GATE</span><b id="pAiGate">WAIT</b></div>
+          </article>
+        </div>
+      </div>
+
+      <div class="ops-layout-secondary">
+        <article class="panel twin-panel"><div class="panel-head"><div><small>DIGITAL TWIN</small><h3>Physical Station Sync</h3></div><b id="pTwinState" class="panel-value">Physical Station Stopped</b></div><div class="twin-stage"><canvas id="physicalTwin"></canvas><div class="twin-hud"><span>PHYSICAL</span><b>ACTUAL RPM SYNC</b></div></div></article>
+        <article class="panel fft-panel"><div class="panel-head"><div><small>SPECTRUM</small><h3>FFT Frequency Analysis</h3></div><b id="pDominantFreq" class="panel-value">— Hz</b></div><div class="chart-wrap"><canvas id="pFftChart"></canvas></div></article>
+        <article class="panel telemetry-panel"><div class="panel-head"><div><small>PROCESS VALUES</small><h3>Control / Sensor Details</h3></div><span class="status-tag neutral">RAW TELEMETRY</span></div><div class="process-value-grid">
+          <div><small>TOTAL g</small><b id="pTotal">—</b></div><div><small>PEAK-TO-PEAK</small><b id="pPtp">—</b></div><div><small>TARGET RPM</small><b id="pTargetRpm">—</b></div><div><small>RPM ERROR</small><b id="pRpmError">—</b></div><div><small>PWM EQ</small><b id="pPwm">—</b></div><div><small>DUTY</small><b id="pDuty">—</b></div><div><small>ACS VOLTAGE</small><b id="pAcs">—</b></div><div><small>CONTROL MODE</small><b id="pMode">—</b></div>
+        </div></article>
+      </div>
+    </section>
+
+    <section id="demo" class="page" data-workspace-only="demo">
+      <div class="ops-commandbar">
+        <div class="line-identity"><span class="line-code demo">DEMO</span><div><b>Recorded Condition Replay</b><small>Recorded sensor CSV · 100 Hz · isolated demo pipeline</small></div></div>
+        <div class="demo-stop-box"><button id="demoStop" class="op-button danger" disabled>Stop Demo</button></div>
+      </div>
+
+      <div class="scenario-console">
+        <div><small>SCENARIO SELECT</small><b id="demoScenarioTitle">Waiting for scenario</b><span id="demoScenarioDesc">Select a condition to replay a recorded sensor CSV.</span></div>
+        <div class="scenario-actions"><button class="scenario-btn normal" data-demo-scenario="normal">Normal</button><button class="scenario-btn" data-demo-scenario="unbalance">Unbalance</button><button class="scenario-btn" data-demo-scenario="misalignment">Misalignment</button><button class="scenario-btn" data-demo-scenario="looseness">Fastener Looseness</button></div>
+      </div>
+
+      <div class="industrial-kpi-grid demo-kpis">
+        <article class="industrial-kpi"><small>DEMO STATE</small><div class="kpi-line"><b id="dMonitorState" class="status-value">READY</b></div><em>Replay engine</em></article>
+        <article class="industrial-kpi"><small>SCENARIO</small><div class="kpi-line"><b id="dScenario">—</b></div><em>Selected condition</em></article>
+        <article class="industrial-kpi"><small>RPM</small><div class="kpi-line"><b id="dRpm">—</b><span class="kpi-unit">RPM</span></div><em>Recorded speed</em></article>
+        <article class="industrial-kpi"><small>VIBRATION RMS</small><div class="kpi-line"><b id="dRms">—</b><span class="kpi-unit">g</span></div><em>Replay signal</em></article>
+        <article class="industrial-kpi"><small>CURRENT</small><div class="kpi-line"><b id="dCurrent">—</b><span class="kpi-unit">A</span></div><em>Recorded current</em></article>
+        <article class="industrial-kpi condition-kpi"><small>AI CONDITION</small><div class="kpi-line"><b id="dDiagnosis" class="status-value">Waiting for analysis</b></div><em id="dDiagnosisText">Waiting for 256 samples</em></article>
+      </div>
+
+      <div class="ops-layout-primary">
+        <article class="panel signal-panel"><div class="panel-head"><div><small>REPLAY SIGNAL</small><h3>3-Axis Vibration</h3></div><div class="legend"><span><i class="lx"></i>X</span><span><i class="ly"></i>Y</span><span><i class="lz"></i>Z</span></div></div><div class="chart-wrap industrial-chart"><canvas id="dWaveChart"></canvas></div></article>
+        <div class="ops-side-stack">
+          <article class="panel twin-panel demo-twin-compact"><div class="panel-head"><div><small>DIGITAL TWIN</small><h3>Demo Twin</h3></div><b id="dTwinState" class="panel-value">Waiting for scenario</b></div><div class="twin-stage"><canvas id="demoTwin"></canvas></div></article>
+          <article class="panel ai-quick-panel"><div class="panel-head"><div><small>AI DIAGNOSIS</small><h3>Demo Condition Diagnosis</h3></div><span id="dAiState" class="status-tag warning">Waiting for analysis</span></div><div id="dProbabilities" class="prob-list compact-prob"></div></article>
+        </div>
+      </div>
+
+      <div class="ops-layout-secondary">
+        <article class="panel fft-panel"><div class="panel-head"><div><small>SPECTRUM</small><h3>FFT Frequency Analysis</h3></div><b id="dDominantFreq" class="panel-value">— Hz</b></div><div class="chart-wrap"><canvas id="dFftChart"></canvas></div></article>
+        <article class="panel telemetry-panel"><div class="panel-head"><div><small>REPLAY VALUES</small><h3>Demo Signal Details</h3></div><span class="status-tag neutral">RECORDED</span></div><div class="process-value-grid demo-values"><div><small>TOTAL g</small><b id="dTotal">—</b></div><div><small>PEAK-TO-PEAK</small><b id="dPtp">—</b></div><div><small>SAMPLES</small><b id="dSamples">0</b></div><div><small>LAST UPDATE</small><b id="dLastUpdate">—</b></div><div><small>SCENARIO</small><b id="dMetricScenario">—</b></div></div></article>
+        <article class="panel dataset-panel"><div class="panel-head"><div><small>DATASET</small><h3>Replay Dataset Composition</h3></div></div><div id="datasetCounts" class="dataset-counts">Checking dataset…</div></article>
+      </div>
+    </section>
+
+    <section id="ai" class="page">
+      <div class="subpage-toolbar"><div><span class="section-kicker">INSPECTION AI</span><h2>AI Diagnosis</h2></div><button id="refreshHistory" class="op-button secondary">Refresh History</button></div>
+      <div class="diagnostic-summary">
+        <article class="panel diagnosis-summary-card" data-workspace-only="physical"><small>PHYSICAL AI</small><strong id="aiPhysicalDiagnosis">Waiting for operating conditions</strong><b id="aiPhysicalConfidence">—</b><p id="aiPhysicalText">Waiting for physical operating conditions.</p></article>
+        <article class="panel diagnosis-summary-card" data-workspace-only="demo"><small>DEMO AI</small><strong id="aiDemoDiagnosis">Waiting for analysis</strong><b id="aiDemoConfidence">—</b><p id="aiDemoText">Analysis starts when the demo starts.</p></article>
+      </div>
+      <article class="panel table-panel"><div class="panel-head"><div><small>HISTORY</small><h3>Recent AI Diagnosis History</h3></div></div><div class="table-scroll"><table><thead><tr><th>Time</th><th>Predicted Condition</th><th>Confidence</th><th>Ground Truth</th><th>Source</th></tr></thead><tbody id="historyTable"></tbody></table></div></article>
+    </section>
+
+    <section id="recordings" class="page">
+      <div class="subpage-toolbar"><div><span class="section-kicker">DATA ACQUISITION</span><h2>Data Recording</h2></div><button id="refreshRec" class="op-button secondary">Refresh List</button></div>
+      <div class="recording-layout">
+        <article class="panel recording-console"><div class="recording-state"><span id="recIndicator" class="rec-indicator"></span><div><small>COLLECTION STATUS</small><b id="recStatus">Idle</b></div><div class="elapsed-box"><small>ELAPSED</small><strong id="recElapsed">00:00:00.0</strong></div></div>
+          <div class="recording-meta"><div><small>File</small><b id="recFile">—</b></div><div><small>Label</small><b id="recLabelNow">—</b></div><div><small>Samples</small><b id="recSamples">0</b></div><div><small>Started</small><b id="recStarted">—</b></div><div><small>Source</small><b id="recSource">—</b></div></div>
+          <div class="recording-controls"><label><span>Recording Name</span><input id="recordName" placeholder="Leave blank to auto-generate"></label><div class="fixed-source"><small>Source</small><b id="recordSourceBadge">—</b></div><input id="recordSource" type="hidden" value="physical"><label><span>Label</span><select id="recordLabel"><option value="normal">Normal</option><option value="unbalance">Unbalance</option><option value="misalignment">Misalignment</option><option value="looseness">Fastener Looseness</option><option value="unknown">Unknown</option></select></label><button id="recordStart" class="op-button success">Start Recording</button><button id="recordStop" class="op-button danger" disabled>Stop Recording</button></div>
+        </article>
+        <article class="panel recording-guide" id="workspaceRecordingGuide"><div class="panel-head"><div><small>PIPELINE</small><h3>Recording Pipeline</h3></div></div><div class="pipeline-list"><div><b>P</b><span>Physical: record ESP32 telemetry only</span></div><div><b>D</b><span>Demo: record replay telemetry only</span></div><div><b>AI</b><span>AI windows are isolated by workspace</span></div><div><b>CSV</b><span>Save raw telemetry</span></div></div></article>
+      </div>
+      <article class="panel table-panel"><div class="panel-head"><div><small>LIVE CAPTURE</small><h3>Latest Telemetry</h3></div><div><span id="captureSourceLabel">Physical</span><span id="captureHint">Waiting for data</span></div></div><div class="table-scroll"><table class="compact-table"><thead><tr><th>#</th><th>elapsed</th><th>ax_g</th><th>ay_g</th><th>az_g</th><th>total_g</th><th>RPM</th><th>Target</th><th>PWM</th><th>Current</th><th>Mode</th></tr></thead><tbody id="captureTable"><tr><td colspan="11">No telemetry received.</td></tr></tbody></table></div></article>
+      <article class="panel table-panel"><div class="panel-head"><div><small>ARCHIVE</small><h3>Saved Recording Sessions</h3></div></div><div class="table-scroll"><table><thead><tr><th>Name</th><th>Source</th><th>Label</th><th>Status</th><th>Samples</th><th>Duration</th><th>Started</th><th>Action</th></tr></thead><tbody id="recordTable"></tbody></table></div></article>
+    </section>
+
+    <section id="twin" class="page">
+      <div class="subpage-toolbar"><div><span class="section-kicker">DIGITAL TWIN</span><h2>Equipment Twin</h2></div><div class="toolbar-actions"><button id="resetPhysicalTwin" data-workspace-only="physical" class="op-button secondary">Reset View</button><button id="showReference" data-workspace-only="physical" class="op-button secondary">Show Physical Reference</button><button id="resetDemoTwin" data-workspace-only="demo" class="op-button secondary">Reset View</button></div></div>
+      <article class="panel twin-main-card" data-workspace-only="physical"><div class="panel-head"><div><small>PHYSICAL TWIN</small><h3>Synchronized to Live Hall RPM</h3></div><span id="twinPhysicalChip" class="control-chip offline">OFFLINE</span></div><div class="twin-stage full"><canvas id="physicalMainTwin"></canvas><div class="twin-overlay"><span>PHYSICAL</span><b id="twinPhysicalState">Physical Station Stopped</b><small>Synchronized with the live motor RPM</small></div></div></article>
+      <article class="panel twin-main-card" data-workspace-only="demo"><div class="panel-head"><div><small>DEMO TWIN</small><h3>Synchronized to Recorded RPM</h3></div><span id="twinDemoChip" class="control-chip offline">READY</span></div><div class="twin-stage full"><canvas id="demoMainTwin"></canvas><div class="twin-overlay"><span>DEMO</span><b id="twinDemoState">Waiting for scenario</b><small>Synchronized with CSV RPM and AI diagnosis</small></div></div></article>
+    </section>
+
+    <section id="logs" class="page">
+      <div class="subpage-toolbar"><div><span class="section-kicker">EVENT LOG</span><h2>System Events</h2></div><button id="clearLogs" class="op-button secondary">Clear Screen Log</button></div>
+      <article class="panel log-panel"><div id="logList" class="log-list"></div></article>
+    </section>
+  </main>
+</div>
+
+<div id="referenceModal" class="modal hidden"><div class="modal-backdrop" data-close-modal></div><div class="modal-card"><div class="modal-head"><div><b>Physical Station Reference</b><span>Reference geometry for the physical twin</span></div><button data-close-modal class="plain-button">Close</button></div><img src="/assets/rig_reference.png" alt="Physical rotating equipment station"></div></div>
+<script src="/assets/digital_twin.js"></script>
+<script src="/assets/app.js"></script>
+</body>
+</html>

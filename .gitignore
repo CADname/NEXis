@@ -1,0 +1,56 @@
+# Local secrets / credentials
+.env
+.env.*
+!.env.example
+**/secrets.h
+**/secrets.*.h
+!**/secrets.example.h
+mosquitto/passwd
+mosquitto/certs/*.key
+mosquitto/certs/*.pem
+mosquitto/certs/*.crt
+!mosquitto/certs/README.md
+*.p12
+*.pfx
+*.jks
+id_rsa
+id_ed25519
+
+# Runtime / generated data
+runtime/*
+!runtime/recordings/
+runtime/recordings/*
+!runtime/recordings/.gitkeep
+*.log
+*.pid
+*.sqlite
+*.sqlite3
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Backups / deployment residue
+.patch_backups/
+.last_*_patch_backup
+*.bak
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.7z
+*.rar
+
+# Reproduced training outputs
+training/output/

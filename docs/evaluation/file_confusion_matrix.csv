@@ -1,0 +1,5 @@
+﻿,pred_normal,pred_unbalance,pred_misalignment,pred_looseness
+actual_normal,69,0,2,1
+actual_unbalance,0,10,0,0
+actual_misalignment,5,0,58,0
+actual_looseness,0,0,0,80
