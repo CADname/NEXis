@@ -8,6 +8,7 @@ mosquitto/certs/*.key
 mosquitto/certs/*.pem
 mosquitto/certs/*.crt
 runtime
+edge_vision
 *.log
 *.tar
 *.tar.gz

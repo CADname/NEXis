@@ -1,93 +1,79 @@
-# NEXis demo guide
+# Demo guide
 
-The clearest demonstration is a **single end-to-end inspection story**. Show one physical unit, one controlled spin, one AI result, and the evidence behind it.
+The strongest demonstration combines the real machine, the live inspection UI, Vision Safety, and Recorded Demo without mixing their claims.
 
-## 3-minute version
+## Recommended 3-minute flow
 
-### 0:00–0:08 — Start with the real machine
+### 0:00–0:20 — Show the physical rig
 
-Open on the **physical rig**, not a title slide or digital twin. If possible, show the motor begin spinning and cut immediately to the result screen.
+Start with the actual motor/shaft assembly and sensor placement. State the problem in one sentence:
 
-One sentence is enough:
+> An assembled rotating system can look correct while a dynamic fault appears only after the shaft begins to spin.
 
-> “This assembly can look normal from the outside and still contain a fault that only appears when it spins.”
+### 0:20–0:55 — Vision pre-check
 
-### 0:08–0:25 — The manufacturing problem
+Open **Physical Station → Vision Safety**.
 
-State the inspection gap: static exterior inspection may miss dynamic assembly faults such as unbalance, shaft/coupling misalignment, or looseness.
+Show:
 
-### 0:25–0:45 — What NEXis measures
+- camera connection;
+- hazard-zone setup;
+- person and hand status;
+- Hall sensor LED blink status;
+- rotor motion status;
+- ADXL345 / ACS712 / Hall-sensor mount status.
 
-Show the physical sensor placement and name the three synchronized inputs:
+The cloud preview may update slower than the camera itself. Explain that inference runs on the local edge process and only status plus a low-rate preview are synchronized to the server.
 
-**vibration + motor current + RPM**
+### 0:55–1:40 — Controlled spin inspection
 
-### 0:45–1:35 — Live spin inspection
+Start the physical motor only after the normal physical safety checks are complete.
 
-Start a controlled run and keep the physical hardware visible long enough to connect the moving machine to the browser telemetry.
+Show this sequence:
 
-Show this sequence clearly:
+1. target RPM is set;
+2. actual RPM rises;
+3. vibration/current/RPM update together;
+4. the AI operating-condition gate becomes active;
+5. class probabilities and diagnosis appear;
+6. the digital twin follows actual RPM and diagnosed condition.
 
-1. motor starts;
-2. RPM rises;
-3. live sensor data moves;
-4. stable-data analysis begins;
-5. diagnosis appears;
-6. the result maps to **PASS candidate** or **investigate / reject**.
+### 1:40–2:10 — Validation evidence
 
-Make the final condition label larger and more visually important than the raw graphs.
+Show the concise evidence:
 
-### 1:35–2:05 — Evidence
+- 225 physical recordings;
+- 217 / 225 correct LOFO files;
+- 96.44% file-level accuracy;
+- confusion matrix and class-level recall.
 
-Show the three key validation numbers:
+Explain that LOFO holds out an entire recording per fold.
 
-- **225 physical recordings**
-- **217 / 225 files correct**
-- **96.44% file-level LOFO accuracy**
+### 2:10–2:45 — Recorded Demo
 
-Then show the confusion matrix. Explain that one complete recording is held out per fold, rather than randomly mixing windows from the same recording across train and test.
+Switch to **Recorded Demo** and choose a condition. Playback continues across matching recordings until Stop is pressed.
 
-### 2:05–2:35 — Engineering depth
+Open **Vision Safety Demo**. Show the fixed digital-twin inspection viewpoint and saved hazard/sensor regions. The camera view is intentionally locked, while the machine continues to animate from replay state:
 
-Show one architecture view:
+- rotor rotates with RPM;
+- Hall LED pulses;
+- unbalance, misalignment, and looseness have distinct visual behavior.
 
-`ESP32 → MQTT/TLS → FastAPI → model → PostgreSQL/WebSocket → browser`
+### 2:45–3:00 — Close
 
-Mention the isolated CSV replay workspace as a reproducibility feature for environments without access to the physical rig.
+Show the architecture once:
 
-### 2:35–3:00 — Future expansion
+`Sensors / camera → edge → MQTT / FastAPI → AI → database / WebSocket → inspection UI + digital twin`
 
-Close with the product direction: vision-based setup verification, configurable inspection recipes, baseline anomaly detection for new assets, and generalized edge connectors. Keep these clearly separated from the implemented spin-inspection core.
+End on the inspection result rather than a framework list.
 
-## 5-minute version
+## Presentation accuracy
 
-Use the same sequence. Spend the extra time on engineering depth that is already implemented: feature extraction, LOFO validation, physical motor control, live sensor transport, replay isolation, storage, security boundaries, and failure handling.
+Use these distinctions consistently:
 
-## Recommended short clip
-
-A useful 5–8 second loop is:
-
-`rig at rest → START → RPM rises → telemetry moves → diagnosis appears`
-
-Use the **real physical rig**. Do not replace the physical evidence with a synthetic animation or digital-twin-only sequence.
-
-## Recommended live sequence
-
-1. show the rig at rest;
-2. show connected sensor/edge status;
-3. arm/start a controlled run;
-4. show RPM rise and stable telemetry;
-5. show diagnosis probabilities;
-6. show the final condition prominently;
-7. stop the motor;
-8. use Demo replay only if additional classes must be shown quickly.
-
-## Avoid these demo mistakes
-
-- Do not lead with the digital twin before the physical problem is clear.
-- Do not spend most of the demo explaining frameworks, model names, or dashboards.
-- Do not let raw graphs visually overpower the inspection result.
-- Do not call 2.56 seconds the complete inspection cycle; it is one model window after stable data is available.
-- Do not present future extensions as implemented features.
-- Do not claim the current classifier transfers unchanged to arbitrary unseen machines.
-- Do not hide dataset imbalance or failure cases; concise disclosure improves credibility.
+- **Physical Station** is connected to the real rig and can issue motor-control commands.
+- **Recorded Demo** replays physical CSV recordings and cannot command the motor.
+- **Physical Vision Safety** performs real camera inference on the local Windows edge.
+- **Vision Safety Demo** uses a fixed digital-twin view for deterministic demonstration of the setup workflow.
+- The 2.56-second value is one AI analysis window, not the total duration of a complete spin-test cycle.
+- NEXis is not a certified machine-safety system.

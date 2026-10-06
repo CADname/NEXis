@@ -1,4 +1,4 @@
-# Local secrets / credentials
+# Credentials and private material
 .env
 .env.*
 !.env.example
@@ -16,24 +16,27 @@ mosquitto/certs/*.crt
 id_rsa
 id_ed25519
 
-# Runtime / generated data
+# Runtime data
 runtime/*
 !runtime/recordings/
 runtime/recordings/*
 !runtime/recordings/.gitkeep
+edge_vision/runtime/
+edge_vision/server_url.txt
 *.log
 *.pid
 *.sqlite
 *.sqlite3
 *.db
 
-# Python
+# Python / local environments
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
 .venv/
 venv/
+edge_vision/.venv/
 
 # OS / IDE
 .DS_Store
@@ -41,9 +44,9 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Backups / deployment residue
-.patch_backups/
-.last_*_patch_backup
+# Local backups and archives
+backup/
+backups/
 *.bak
 *.tar
 *.tar.gz

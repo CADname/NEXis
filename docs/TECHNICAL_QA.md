@@ -1,55 +1,49 @@
 # Technical Q&A
 
-## What is NEXis in one sentence?
+## What problem does NEXis solve?
 
-NEXis is an AI end-of-line spin-inspection prototype that briefly runs an assembled rotating-drive module, analyzes synchronized vibration/current/RPM, and identifies Normal, Unbalance, Misalignment, or Looseness before shipment.
+NEXis provides a repeatable spin-inspection workflow for rotating assemblies. It combines synchronized sensor data, machine state, vision pre-checks, AI diagnosis, and inspection evidence in one interface.
 
-## Why is this not just another vibration monitor?
+## Which signals are used for condition diagnosis?
 
-A normal condition-monitoring dashboard mainly trends machine signals. NEXis is organized around a **manufacturing inspection workflow**: controlled spin → synchronized multi-sensor capture → machine-condition classification → stored result → PASS-candidate or investigate/reject decision support.
+The classifier uses features derived from synchronized vibration, motor current, RPM, and related control/cross-signal information. Runtime acquisition is 100 Hz and the model window is 256 samples.
 
-## Why use three signal types?
+## Which conditions are classified?
 
-Different assembly faults can affect mechanical vibration, rotational stability/control behavior, and electrical load differently. NEXis preserves these signals together and derives cross-signal features rather than relying on one sensor channel alone.
+Normal, Unbalance, Misalignment, and Fastener Looseness.
 
-## Is 96.44% from random window splitting?
+## How was the model evaluated?
 
-No. The reference model-selection run uses **leave-one-file-out validation**: one complete CSV recording is held out per fold, so windows from that recording do not enter training for that fold.
+The supplied evaluation uses leave-one-file-out validation over 225 physical recordings. Each held-out recording remains isolated from training for its fold.
 
-## Does that prove the model works on any motor?
+## Does 96.44% mean the model works on every machine?
 
-No. It proves performance on the supplied prototype dataset under its measured operating setup. A different machine design, sensor mount, speed range, or load should be validated separately.
+No. It is the measured file-level accuracy on the supplied rig and dataset under the documented acquisition procedure. Deployment on another machine requires validation and, where needed, retraining or recalibration.
 
-## Is the inspection really 2.56 seconds?
+## What does the vision system detect?
 
-2.56 seconds is the data duration of one 256-sample window at 100 Hz. A complete physical test also includes spin-up and stabilization, so the repository does not claim a fixed 2.56-second total cycle time.
+The Windows edge performs YOLO person detection, MediaPipe hand tracking, hazard-zone intersection checks, Hall LED blink detection, rotor motion detection, and sensor-mount baseline comparison.
 
-## Why RandomForest instead of a deep model?
+## Is the web preview used as the AI input?
 
-For this prototype dataset, engineered time/frequency/current/control features with an ensemble classifier provide a compact and interpretable baseline that is inexpensive to run. The engineering value is the **end-to-end physical inspection workflow**, not RandomForest by itself.
+No. Camera inference is performed locally from the camera frames. The cloud preview is an operator-visibility stream and may update at a lower rate without reducing the edge inference frame source to that rate.
 
-## What is the key engineering contribution?
+## How is Hall sensor activity checked visually?
 
-The useful combination is the workflow: a controlled physical spin test, synchronized multi-sensor evidence, file-level validation, fault diagnosis, replayable data, and a browser result path aimed at catching dynamic assembly issues before shipment.
+The configured Hall LED ROI is monitored for repeated brightness transitions. A continuously illuminated LED is not sufficient to report a blink sequence.
 
-## Why is vision not part of the demonstrated core?
+## How are sensor positions checked?
 
-The strongest current evidence is the sensor-based spin diagnosis. Vision-based setup verification is a possible extension, but it should be treated separately until it is implemented and validated in the same end-to-end workflow.
+The user defines ROIs for sensor mounting areas and captures a baseline while the sensors are correctly installed. The edge compares current ROI appearance against that baseline across multiple frames. A substantial sustained change is reported as changed or missing.
 
-## How can this scale to other machines?
+## Why is the Recorded Demo useful?
 
-The safe path is not to claim that the existing four-class classifier transfers unchanged. A scalable system can add configurable recipes, generalized edge connectors, normal-baseline anomaly detection, and then asset-specific diagnosis once relevant labeled data exists.
+It provides a deterministic way to demonstrate all recorded conditions without commanding the physical motor. Matching physical recordings are selected continuously until the operator presses Stop.
 
-## What happens if the network fails?
+## What is the fixed-view Vision Safety Demo?
 
-The current architecture is a prototype and should not be treated as a safety controller. Industrial deployment should add explicit offline behavior, local safeguards, retries/buffering, health monitoring, and independent hardware safety controls.
+It is a digital-twin-based inspection setup surface. The viewpoint is locked so hazard zones and sensor regions remain spatially stable, while machine motion and fault animation continue to follow replay RPM and condition state.
 
-## What would be built next?
+## Is NEXis a safety-rated system?
 
-The next product layer is measurement-setup validation plus repeatable inspection recipes, followed by broader edge connectivity and machine-specific validation workflows.
-
-## What are the three main takeaways?
-
-1. **It is a real physical test, not only a dashboard.**
-2. **The result is backed by 225 recordings and 217/225 LOFO-correct files.**
-3. **The demonstrated claim is deliberately scoped to the measured prototype setup.**
+No. It is an engineering prototype. Vision and cloud software are supervisory checks and must not replace safety-rated guards, interlocks, emergency stops, or PLC safety logic.

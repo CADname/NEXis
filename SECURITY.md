@@ -1,33 +1,34 @@
-# Security notes
+# Security and safety notes
 
-NEXis is an engineering prototype. The repository excludes live deployment credentials and private key material, but it is not a production-hardening guide or a safety certification.
+NEXis is an engineering prototype. Keep deployment credentials and private key material outside the repository.
 
 ## Never commit
 
-Do not commit any of the following:
-
-- `.env` or other environment files containing live credentials
-- `secrets.h`
+- `.env` files with live credentials
+- ESP32 `secrets.h`
 - `mosquitto/passwd`
 - TLS private keys or private certificate bundles
 - SSH keys
 - database dumps
 - shell history
-- server backups or deployment archives
-- runtime recordings that contain data you do not intend to share
+- deployment backups or archives
+- private runtime recordings
+- local Vision Edge state or baselines
 
-The included `.gitignore` and `scripts/repository_check.py` cover common cases, but they are not a substitute for reviewing staged changes.
+The included ignore rules and `scripts/validate_repo.py` cover common accidental exposures, but staged changes should still be reviewed before pushing.
 
-## Internet-facing deployment
+## Browser access
 
-The supplied Nginx configuration listens on HTTP port 80. If the service is exposed outside a trusted network, terminate HTTPS in front of Nginx or replace the proxy setup with HTTPS. Set `COOKIE_SECURE=true` for HTTPS access, use strong administrator/database/MQTT credentials, and use a properly managed CA/server certificate pair.
+The application intentionally presents a direct **Physical Station / Recorded Demo** workspace selector instead of a user-login form. A public Internet deployment therefore needs an external access-control boundary, such as a trusted network, VPN, firewall allowlist, reverse-proxy authentication, or another appropriate gateway.
 
-Port 1883 is intended only for the private Docker network. Do not expose that anonymous internal MQTT listener to the Internet. The supplied Compose file publishes only the TLS/authenticated 8883 listener for the physical ESP32.
+## MQTT
 
-## Device provisioning
+Port 1883 is intended for the private Docker network. The physical-device listener on port 8883 is the externally published MQTT endpoint and should use credentials and TLS material managed outside Git.
 
-The ESP32 Wi-Fi setup AP password belongs in `secrets.h`. The included firmware does not print that password to the serial console. Saved Wi-Fi SSIDs/passwords are device-local provisioning data and should be erased before transferring or disposing of a device.
+## Vision Edge
+
+Set a strong `VISION_EDGE_TOKEN`. Local edge state and sensor baselines are stored outside the repository. Camera inference is a supervisory inspection function, not a certified safety function.
 
 ## Physical safety
 
-NEXis can issue motor-control commands. Treat it as a prototype supervisory layer, not as an emergency-stop, interlock, machine-guarding, or safety-rated control system. Physical safety mechanisms should remain independent of the web application, MQTT path, and ESP32 software.
+NEXis can issue motor-control commands. It must not be used as the sole emergency-stop, interlock, guard-monitoring, or safety-rated control layer. Physical safety hardware must remain independent of the browser, network, camera, MQTT, and ESP32 application software.

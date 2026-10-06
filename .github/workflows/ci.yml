@@ -1,4 +1,4 @@
-name: repository-check
+name: ci
 
 on:
   push:
@@ -15,12 +15,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Repository guard
-        run: python scripts/repository_check.py
-      - name: Dataset and evaluation evidence
+      - name: Repository validation
+        run: python scripts/validate_repo.py
+      - name: Dataset and evaluation validation
         run: python scripts/validate_evidence.py
       - name: Python syntax
-        run: python -m py_compile app/main.py app/ai_model.py scripts/repository_check.py scripts/validate_evidence.py training/reproduce_training.py
+        run: python -m py_compile app/main.py app/ai_model.py edge_vision/vision_edge_agent.py scripts/validate_repo.py scripts/validate_evidence.py training/reproduce_training.py
       - name: JavaScript syntax
         run: node --check app/web/assets/app.js && node --check app/web/assets/digital_twin.js
       - name: Shell syntax

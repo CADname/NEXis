@@ -2,253 +2,201 @@
   <img src="app/web/assets/nexis_logo.png" alt="NEXis" width="360">
 </p>
 
-# NEXis — AI End-of-Line Spin Inspection
+# NEXis — AI Machine Commissioning & Inspection
 
 <p align="center">
-  <strong>Spin. Sense. Diagnose.</strong><br>
-  Catch hidden assembly defects before shipment.
+  <strong>Spin. Sense. See. Diagnose.</strong><br>
+  A connected inspection platform for rotating machinery that combines multi-sensor diagnosis, vision safety checks, controlled spin testing, and a synchronized digital twin.
 </p>
 
 <p align="center">
-  <img src="docs/images/nexis_hero.png" alt="NEXis end-of-line spin inspection system with physical rig, sensors, camera, power supply, and live dashboard" width="920">
+  <img src="docs/images/nexis_hero.png" alt="NEXis physical inspection platform" width="920">
 </p>
 
-A motor/shaft/coupling assembly can look correct after assembly and still contain a fault that only appears when it rotates. **NEXis runs a short controlled spin test, captures vibration + motor current + RPM together, and classifies the run as Normal, Unbalance, Misalignment, or Looseness.**
+NEXis is an end-of-line inspection prototype for rotating assemblies. A controlled spin test brings hidden dynamic faults to the surface while vibration, motor current, and RPM are captured together. The platform classifies the operating condition, visualizes the machine state, records evidence, and adds an edge-vision pre-check for personnel, sensor placement, Hall-sensor LED activity, and rotor motion.
 
-The goal is not another generic condition-monitoring dashboard. The goal is a concrete manufacturing gate: **use dynamic behavior to flag a suspicious assembly before shipment.**
-
-| **225** | **217 / 225** | **96.44%** | **3 synchronized signals** |
-|---:|---:|---:|---:|
-| Physical recordings | Correct LOFO files | File-level accuracy | Vibration + Current + RPM |
-
-**Quick links:** [Evidence](docs/EVIDENCE.md) · [3–5 min demo guide](docs/DEMO_GUIDE.md) · [Architecture](docs/ARCHITECTURE.md) · [Reproduce training](training/README.md)
-
-## The inspection workflow
+## What NEXis does
 
 ```mermaid
 flowchart LR
-    A[Assembly complete] --> B[Short controlled spin]
-    B --> C[Vibration + Current + RPM]
-    C --> D[AI diagnosis]
-    D --> E{Condition}
-    E -->|Normal| F[PASS candidate]
-    E -->|Unbalance / Misalignment / Looseness| G[Investigate / reject]
+    A[Assembly ready] --> B[Vision pre-check]
+    B --> C[Controlled spin test]
+    C --> D[Vibration + Current + RPM]
+    D --> E[AI condition diagnosis]
+    E --> F[Digital twin + inspection result]
+    F --> G{Decision support}
+    G -->|Normal| H[Pass candidate]
+    G -->|Fault detected| I[Inspect / correct / retest]
 ```
 
-**Real hardware → real sensor data → AI diagnosis → inspection decision support.**
+The platform provides two clearly separated workspaces:
 
-A complete physical cycle includes motor spin-up and stabilization. The classifier itself analyzes a **256-sample / 2.56-second** stable-data window at 100 Hz; NEXis does **not** claim that the entire inspection cycle always finishes in 2.56 seconds.
+- **Physical Station** — live ESP32 telemetry, controlled motor commands, AI diagnosis, vision safety, recording, event history, and a synchronized digital twin.
+- **Recorded Demo** — repeatable replay of physical CSV recordings with continuous condition playback, AI diagnosis, animated fault behavior, and a fixed-view digital-twin vision setup.
 
-## Why this matters
+## Physical inspection stack
 
-Static exterior inspection can miss defects that change the dynamics of an assembled rotating system. Rotor unbalance, shaft/coupling misalignment, and loosened fastening can reveal themselves through vibration, load/current behavior, and rotational stability only after the assembly starts moving.
-
-NEXis turns that short run into a repeatable inspection signal. Instead of showing raw telemetry alone, it connects the physical test to a condition diagnosis and a clear manufacturing decision path.
-
-## What is proven today
-
-| Capability | Status |
+| Layer | Implementation |
 |---|---|
-| ESP32 physical telemetry and motor-control node | **Implemented** |
-| ADXL345 vibration sensing | **Implemented** |
-| ACS712 motor-current sensing | **Implemented** |
-| Hall-sensor RPM feedback | **Implemented** |
-| MQTT transport | **Implemented** |
-| FastAPI + WebSocket backend | **Implemented** |
-| PostgreSQL telemetry/prediction history | **Implemented** |
-| Browser operations workspace | **Implemented** |
-| Recorded-run replay workspace | **Implemented** |
-| Browser digital twin | **Implemented** |
-| 4-class Normal / Unbalance / Misalignment / Looseness diagnosis | **Implemented** |
+| Vibration | ADXL345, 3-axis, 100 Hz |
+| Motor current | ACS712 |
+| Rotational speed | Hall sensor RPM feedback |
+| Motor drive | ESP32 + BTS7960 |
+| Edge transport | MQTT / TLS |
+| Backend | FastAPI + WebSocket |
+| Storage | PostgreSQL + runtime recordings |
+| Diagnosis | RandomForest multi-class classifier |
+| Vision | YOLO person detection + MediaPipe hand tracking + OpenCV ROI analysis |
+| Visualization | Browser dashboard + synchronized WebGL digital twin |
 
-The strongest validated claim in this repository is the **sensor-based spin-inspection workflow above**. Potential extensions such as vision-based setup verification, configurable inspection recipes, baseline anomaly detection for unseen assets, and generalized edge connectors are intentionally separated from the implemented core.
+## Vision safety and setup verification
 
-## Physical prototype
+The Physical Station can run a Windows edge-vision connector next to the machine. Camera inference runs locally; compact status data and a low-rate preview frame are synchronized to the server.
 
-<p align="center">
-  <img src="docs/images/sensor_layout.png" alt="NEXis physical sensor layout" width="780">
-</p>
+Implemented checks include:
 
-The current firmware uses these connections:
+- **Person detection** with YOLO.
+- **Hand detection** with MediaPipe and danger/warning-zone intersection checks.
+- **User-defined hazard polygon** and configurable warning margin.
+- **Hall sensor LED blink detection** based on repeated brightness transitions inside a configured ROI. A continuously illuminated LED is not treated as a valid blink sequence.
+- **Rotor motion detection** using local visual motion evidence inside a configured ROI.
+- **Sensor mount verification** for ADXL345, ACS712, and Hall sensor positions using a captured visual baseline and multi-frame change confirmation.
+- **Persistent setup** with saved hazard/ROI geometry, reset, and baseline recapture workflows.
 
-| Function | Pin |
-|---|---:|
-| Hall sensor / RPM pulse | GPIO 32 |
-| ACS712 analog current | GPIO 36 |
-| BTS7960 RPWM | GPIO 25 |
-| BTS7960 LPWM | GPIO 26 |
-| BTS7960 R_EN | GPIO 27 |
-| BTS7960 L_EN | GPIO 14 |
-| ADXL345 I²C SDA | GPIO 21 |
-| ADXL345 I²C SCL | GPIO 22 |
-
-### Physical fault setups
+> Sensor mount verification is a visual baseline-change check, not generic sensor-object recognition. Camera position and lighting should remain stable after calibration.
 
 <p align="center">
-  <img src="docs/images/fault_setup_examples.png" alt="NEXis physical fault configurations" width="1000">
+  <img src="docs/images/vision_safety_demo.png" alt="NEXis fixed-view digital-twin vision setup with hazard zone and sensor regions" width="1000">
 </p>
 
-The reference dataset contains physical runs representing:
+The Recorded Demo exposes the same setup concept on a **fixed digital-twin viewpoint**. Camera orbit, pan, and zoom are locked while the machine itself remains animated: the rotor spins with replay RPM, the Hall LED pulses, and fault-specific motion is shown for unbalance, misalignment, and fastener looseness.
 
-- **Normal** — reference operating condition
-- **Unbalance** — eccentric rotating mass
-- **Misalignment** — shaft/coupling alignment fault
-- **Looseness** — loosened fastening/mount condition
+## Condition diagnosis
 
-## Measured AI evidence
+NEXis classifies four conditions:
 
-The repository ships with **225 physical CSV recordings** and the trained model used by the application.
+- **Normal**
+- **Unbalance**
+- **Misalignment**
+- **Fastener Looseness**
 
-| Class | Recordings | LOFO file-level recall |
-|---|---:|---:|
-| Normal | 72 | 95.83% |
-| Unbalance | 10 | 100.00% |
-| Misalignment | 63 | 92.06% |
-| Looseness | 80 | 100.00% |
-| **Total** | **225** | — |
-
-### Evaluation method
-
-The included training program uses **leave-one-file-out (LOFO)** validation. For each fold, one complete recording is held out and every window from that file stays out of training for that fold. This avoids the leakage risk of randomly mixing windows from the same recording into both train and test sets.
-
-The model-selection run compared RandomForest and ExtraTrees. `RandomForest_fast` was selected and then retrained on all 225 recordings for the bundled inference artifact.
+The repository includes the physical recordings, training code, model artifact, and evaluation outputs used by the application.
 
 | Metric | Recorded result |
 |---|---:|
-| File-level accuracy | **96.44% (217/225)** |
+| Physical recordings | **225** |
+| Correct LOFO files | **217 / 225** |
+| File-level accuracy | **96.44%** |
 | File-level macro-F1 | **97.05%** |
 | Window-level accuracy | **96.21%** |
 | Window-level macro-F1 | **96.85%** |
 | Sampling frequency | **100 Hz** |
-| Window size | **256 samples (2.56 s)** |
+| Window size | **256 samples / 2.56 s** |
 | Window step | **64 samples** |
-| Engineered feature count | **383** |
-| Final estimator | **RandomForest, 220 trees** |
+| Engineered features | **383** |
+| Classifier | **RandomForest, 220 trees** |
+
+| Condition | Recordings | LOFO file-level recall |
+|---|---:|---:|
+| Normal | 72 | 95.83% |
+| Unbalance | 10 | 100.00% |
+| Misalignment | 63 | 92.06% |
+| Fastener Looseness | 80 | 100.00% |
 
 <p align="center">
-  <img src="docs/images/confusion_matrix.png" alt="NEXis 225-file leave-one-file-out confusion matrix" width="610">
+  <img src="docs/images/confusion_matrix.png" alt="NEXis leave-one-file-out confusion matrix" width="610">
 </p>
 
-Raw evaluation outputs are committed under [`docs/evaluation/`](docs/evaluation/), including per-file predictions, per-window predictions, classification reports, feature importance, and model-selection results. The training program is in [`training/reproduce_training.py`](training/reproduce_training.py).
+The evaluation uses **leave-one-file-out (LOFO)** validation so windows from the held-out recording never enter the training set for that fold. These metrics describe the supplied physical test rig and dataset; they are not a claim of universal transfer to arbitrary unseen machines.
 
-> **Metric scope:** these results measure the supplied prototype dataset and operating setup. They are not evidence that the same classifier can identify the same faults on an arbitrary unseen machine without machine-specific validation.
-
-## AI pipeline
-
-<p align="center">
-  <img src="docs/images/ml_pipeline.png" alt="NEXis machine-learning pipeline" width="720">
-</p>
-
-At runtime, NEXis waits for a valid rotating condition before feeding physical telemetry into the classifier. A 256-sample window is transformed into time-domain, spectral, vibration, control, current, and cross-signal features. The classifier produces class probabilities and the application stores/broadcasts the result.
-
-The model details are intentionally below the product workflow: the differentiator is the **end-to-end physical inspection path**, not RandomForest by itself.
-
-## End-to-end architecture
+## System architecture
 
 ```mermaid
-flowchart LR
-    V[ADXL345 vibration] --> E[ESP32]
-    I[ACS712 current] --> E
-    R[Hall RPM] --> E
-    C[BTS7960 motor control] <--> E
-    E -->|MQTT TLS :8883| M[Mosquitto]
-    M -->|internal MQTT| A[FastAPI]
-    D[Recorded CSV runs] -->|Replay| A
-    ML[RandomForest model] --> A
-    A --> DB[(PostgreSQL)]
-    A -->|HTTP / WebSocket| UI[Operations UI]
-    A --> DT[Digital Twin state]
-    DT --> UI
+flowchart TB
+    subgraph Machine[Physical rotating machine]
+      ACC[ADXL345]
+      CUR[ACS712]
+      HALL[Hall sensor]
+      MOTOR[Motor + shaft + rotor]
+      CAM[USB camera]
+    end
+
+    ACC --> ESP[ESP32]
+    CUR --> ESP
+    HALL --> ESP
+    ESP <--> DRIVER[BTS7960]
+    DRIVER --> MOTOR
+
+    ESP -->|MQTT/TLS| MQTT[Mosquitto]
+    MQTT --> API[FastAPI]
+    MODEL[RandomForest model] --> API
+    CSV[Recorded physical runs] --> API
+    API --> DB[(PostgreSQL)]
+    API -->|WebSocket / HTTP| WEB[Operations UI]
+    API --> TWIN[Digital twin state]
+    TWIN --> WEB
+
+    CAM --> EDGE[Windows Vision Edge]
+    EDGE -->|Local inference| VISION[YOLO + MediaPipe + OpenCV]
+    VISION -->|Status + preview| API
 ```
 
-Two workspaces intentionally separate real hardware from demonstration data:
+See [Architecture](docs/ARCHITECTURE.md) for the implementation map and [Evidence](docs/EVIDENCE.md) for claim boundaries.
 
-- **Physical** — consumes ESP32 telemetry and can issue controlled motor commands.
-- **Demo** — replays bundled recordings and cannot use physical-control endpoints.
+## Recorded Demo
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the implementation map.
+The demo workspace is intentionally isolated from physical motor control. Selecting a condition starts continuous playback:
 
-## 60-second system walkthrough
+1. one matching physical CSV is selected;
+2. its samples replay through the same presentation and diagnosis path;
+3. when it finishes, another matching file is selected;
+4. playback continues until **Stop** is pressed.
 
-1. **Show the real rig first.** Make the physical motor/shaft assembly visible before opening dashboards.
-2. **Start a controlled run.** Make it obvious that the telemetry comes from the moving hardware.
-3. **Show vibration + current + RPM arriving together.**
-4. **Show the condition result prominently.** Normal / Unbalance / Misalignment / Looseness should be easier to see than raw graphs.
-5. **Show the evidence:** 225 physical recordings, 217/225 correct LOFO files, 96.44% file accuracy.
-6. **Only then show architecture and expansion.**
-
-For a 2–5 minute technical demo, use [`docs/DEMO_GUIDE.md`](docs/DEMO_GUIDE.md).
-
-
-## From one validated station to a configurable inspection system
-
-The current repository deliberately starts with one concrete, validated application rather than claiming universal diagnosis. The longer-term **FlexInspect** direction keeps this spin-test workflow as the reference asset while making the surrounding inspection system easier to reconfigure:
-
-```text
-CURRENT CORE
-Rotating-drive spin test
-  → synchronized vibration/current/RPM
-  → validated four-class diagnosis
-  → inspection result
-
-NEXT LAYERS
-Vision setup verification
-  → verify sensor presence/placement before measurement
-
-Configurable inspection recipes
-  → bind machine component ↔ sensor stream ↔ visual region
-
-Normal-baseline anomaly detection
-  → provide a safe first step for assets without labeled fault data
-
-Generalized edge connectors
-  → expand beyond the current ESP32/MQTT reference node
-```
-
-These extensions are future directions and should be presented as implemented only after they are built and validated.
+The digital twin follows replay RPM and condition state. This allows Normal, Unbalance, Misalignment, and Fastener Looseness to be demonstrated repeatedly without commanding the real motor.
 
 ## Repository layout
 
 ```text
 app/
-  main.py                  FastAPI, MQTT, DB, replay, recording and control APIs
-  ai_model.py              Runtime feature extraction and model inference
-  model/                    Bundled trained model
-  replay_data/              225 physical CSV recordings
-  web/                      Operations UI and digital twin
+  main.py                   FastAPI, MQTT, WebSocket, replay, vision, recording and control APIs
+  ai_model.py               Runtime feature extraction and model inference
+  model/                     Trained classifier artifact
+  replay_data/               Physical CSV recordings used by Recorded Demo
+  web/                       Operations UI and WebGL digital twin
+edge_vision/
+  vision_edge_agent.py       Local camera inference and server synchronization
+  yolo11n.pt                 Person detector weights
+  START_NEXIS_VISION.vbs     One-click Windows launcher
 firmware/
-  NEXis_ESP32_AWS_Physical_v1_4_0/
+  NEXis_ESP32_Physical/      ESP32 motor/sensor/MQTT firmware
 training/
-  reproduce_training.py     LOFO training/evaluation program
-  README.md
-docs/
-  EVIDENCE.md               Claims, metrics and limitations
-  ARCHITECTURE.md           Implementation map
-  DEMO_GUIDE.md             2–5 minute system demo sequence
-  TECHNICAL_QA.md           Technical scope and limitations
-  VALIDATION.md             Repository verification checks
-  evaluation/               Raw evaluation reports
-  images/                   Hardware, fault and model figures
+  reproduce_training.py      Training and LOFO evaluation
 scripts/
-  repository_check.py       Repository safety and consistency guard
-  validate_evidence.py      Dataset/evaluation consistency check
-.github/workflows/
-  repository-check.yml
+  validate_repo.py           Repository cleanliness and source checks
+  validate_evidence.py       Dataset/evaluation consistency validation
+docs/
+  ARCHITECTURE.md
+  DEMO_GUIDE.md
+  EVIDENCE.md
+  TECHNICAL_QA.md
+  VALIDATION.md
+  evaluation/
+  images/
 ```
 
-## Quick start
+## Server quick start
 
-### 1. Configure server secrets
+### 1. Configure environment values
 
 ```bash
 cp .env.example .env
 ```
 
-Replace every `CHANGE_ME` value. `prepare.sh` rejects an empty or placeholder administrator/PostgreSQL password. Set `COOKIE_SECURE=true` when the browser reaches NEXis over HTTPS.
+Set a strong PostgreSQL password and a random `VISION_EDGE_TOKEN` before deployment.
 
-### 2. Create MQTT credentials and certificates
+### 2. Provide MQTT credentials and certificates
 
-Create `mosquitto/passwd` locally and provide:
+Create `mosquitto/passwd` and provide:
 
 ```text
 mosquitto/certs/ca.crt
@@ -256,50 +204,52 @@ mosquitto/certs/server.crt
 mosquitto/certs/server.key
 ```
 
-These are intentionally excluded from Git.
+These files are intentionally excluded from Git.
 
-### 3. Configure ESP32 secrets
-
-Copy:
-
-```text
-firmware/NEXis_ESP32_AWS_Physical_v1_4_0/secrets.example.h
-```
-
-to `secrets.h`, then set the Wi-Fi setup AP password, MQTT username/password, broker host, and CA certificate for your deployment. `secrets.h` is ignored by Git.
-
-### 4. Start the stack
+### 3. Start the stack
 
 ```bash
 ./prepare.sh
 ```
 
-The supplied Docker Compose stack starts FastAPI, PostgreSQL, Mosquitto, and Nginx.
+The Compose stack starts FastAPI, PostgreSQL, Mosquitto, and Nginx.
 
-## Reproduce or inspect the evidence
+## ESP32 setup
 
-Run lightweight repository checks:
+Copy:
+
+```text
+firmware/NEXis_ESP32_Physical/secrets.example.h
+```
+
+to `secrets.h`, then configure the Wi-Fi setup AP password, MQTT credentials, broker address, and CA certificate. `secrets.h` is excluded from Git.
+
+## Windows vision connector
+
+Open `edge_vision/README.md`, create `server_url.txt` from `server_url.example.txt`, and run:
+
+```text
+START_NEXIS_VISION.vbs
+```
+
+The launcher creates/reuses a local Python environment, connects to the Physical Station workspace, retrieves the edge token, starts the camera service, and opens Vision Safety in the browser. Camera selection and camera-off controls are available from the web UI.
+
+## Validation
 
 ```bash
-python scripts/repository_check.py
+python scripts/validate_repo.py
 python scripts/validate_evidence.py
+python -m py_compile app/main.py app/ai_model.py edge_vision/vision_edge_agent.py
+node --check app/web/assets/app.js
+node --check app/web/assets/digital_twin.js
 ```
 
-To reproduce the full model-selection/evaluation process:
+CI runs the repository, evidence, Python, JavaScript, and shell checks on every push and pull request.
 
-```bash
-python training/reproduce_training.py
-```
+## Safety and deployment boundary
 
-Full LOFO training is CPU-intensive because it repeatedly fits ensemble models. The committed evaluation CSVs allow the recorded results to be inspected without waiting for a complete rerun.
+NEXis is an engineering prototype and **not a safety-rated PLC, emergency-stop system, interlock, machine guard, or certified quality station**. Physical safety mechanisms must remain independent of browser, camera, MQTT, cloud, and ESP32 software.
 
-## Security and safety notes
+The browser UI intentionally uses direct workspace selection instead of a user-login form. For Internet-facing deployments, place NEXis behind an appropriate access-control layer or restrict network access to trusted users.
 
-- No intended production passwords, private TLS keys, shell history, database dumps, or local-user paths are included.
-- The ESP32 setup AP password is not printed to the serial console by the included firmware.
-- The anonymous MQTT listener on port 1883 remains internal to the Compose network; the physical-device listener is TLS/authenticated on 8883.
-- The included Nginx configuration listens on HTTP port 80. Use HTTPS termination for an Internet-facing deployment.
-- NEXis is an engineering prototype, **not a certified machine-safety system**. Browser/MQTT control must not be the sole safety layer around hazardous machinery.
-- Guest Demo sessions are separated from the Physical workspace and cannot use physical-control endpoints.
-
-See [`SECURITY.md`](SECURITY.md).
+See [SECURITY.md](SECURITY.md) for deployment notes.

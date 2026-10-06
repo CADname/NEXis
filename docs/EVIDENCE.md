@@ -1,118 +1,81 @@
-# NEXis evidence and claim boundary
+# Evidence and claim boundary
 
-This document separates what the repository directly demonstrates from future product directions.
+This document states what the repository directly demonstrates and where the evidence stops.
 
-## 1. Demonstrated physical system
+## Sensor-based condition diagnosis
 
-The current reference rig is a rotating-drive testbed with:
+The repository contains 225 physical CSV recordings from the rotating test rig and the model used by the application.
 
-- ESP32 DevKit-class controller
-- ADXL345 accelerometer
-- ACS712 current sensor
-- Hall-effect RPM sensing
-- BTS7960 motor driver
-- DC motor, shaft, support/bearing components, and rotating disk/load hardware
+| Condition | Physical recordings | LOFO file-level recall |
+|---|---:|---:|
+| Normal | 72 | 95.83% |
+| Unbalance | 10 | 100.00% |
+| Misalignment | 63 | 92.06% |
+| Fastener Looseness | 80 | 100.00% |
+| **Total** | **225** | — |
 
-The included firmware streams vibration, current, RPM/control information and accepts bounded remote motor commands.
+Recorded evaluation summary:
 
-## 2. Supplied dataset
-
-The repository contains 225 labeled physical recordings in `app/replay_data/`.
-
-| Label | Files |
+| Metric | Result |
 |---|---:|
-| normal | 72 |
-| unbalance | 10 |
-| misalignment | 63 |
-| looseness | 80 |
-| **total** | **225** |
+| Correct LOFO files | 217 / 225 |
+| File-level accuracy | 96.44% |
+| File-level macro-F1 | 97.05% |
+| Window-level accuracy | 96.21% |
+| Window-level macro-F1 | 96.85% |
+| Sampling frequency | 100 Hz |
+| Window size | 256 samples |
+| Window duration | 2.56 s |
+| Window step | 64 samples |
+| Engineered features | 383 |
+| Selected estimator | RandomForest, 220 trees |
 
-The dataset is imbalanced, particularly for `unbalance`, and that limitation should be considered when interpreting the metrics.
+The evaluation is leave-one-file-out: one complete recording is held out for each fold, and windows from that recording are not mixed into training for that fold.
 
-## 3. Feature and decision pipeline
+Raw evaluation outputs are stored in `docs/evaluation/`. The reproduction program is `training/reproduce_training.py`.
 
-Reference configuration:
+### Scope of the metric
 
-- sampling rate: 100 Hz
-- window size: 256 samples
-- step: 64 samples
-- one window duration: 2.56 s
-- engineered features: 383
-- candidate estimators: RandomForest and ExtraTrees
-- selected estimator: RandomForest (`n_estimators=220`, `random_state=42`, balanced class weights, sqrt feature subsampling)
-- file-level decision: majority vote across window predictions; mean class probability breaks a tie
+The result measures the supplied physical rig, acquisition procedure, conditions, and dataset. It does not establish that the same trained classifier transfers unchanged to every rotating machine, RPM range, sensor installation, or fault severity.
 
-The feature set spans raw and centered vibration statistics, FFT energy/frequency features, RPM/control features, current features, ratios, and cross-signal correlations.
+## Physical hardware path
 
-## 4. Validation design
+The repository implements the complete reference path for:
 
-The model-selection program performs **leave-one-file-out (LOFO)** validation.
+- ESP32 telemetry and remote-control messages;
+- ADXL345 vibration acquisition;
+- ACS712 current acquisition;
+- Hall-sensor RPM feedback;
+- BTS7960 motor-drive commands;
+- MQTT/TLS transport;
+- FastAPI ingestion and WebSocket broadcast;
+- PostgreSQL history;
+- browser operations UI;
+- recording and replay;
+- synchronized WebGL digital twin.
 
-For every recording:
+## Vision path
 
-1. hold out the entire CSV file;
-2. train on windows from the remaining files;
-3. predict every window in the held-out file;
-4. combine those window predictions into one file-level decision;
-5. repeat for all 225 files.
+The Windows vision connector implements:
 
-This prevents windows from the same held-out recording appearing in both train and test for that fold. It does not prove generalization to different machines, different sensors, different mounting conditions, or a different operating regime.
+- person detection with YOLO;
+- hand detection with MediaPipe;
+- user-defined hazard and warning zones;
+- Hall LED repeated brightness-transition detection;
+- rotor visual-motion detection;
+- ADXL345 / ACS712 / Hall-sensor mount baseline comparison;
+- camera discovery, switching, and remote camera-off requests;
+- persistent server configuration and sensor-baseline workflow;
+- low-rate cloud preview frames while inference remains local.
 
-## 5. Recorded model-selection result
+### Vision claim boundary
 
-| Model | File accuracy | File macro-F1 | Window accuracy | Window macro-F1 |
-|---|---:|---:|---:|---:|
-| RandomForest_fast | **96.44%** | **97.05%** | **96.21%** | **96.85%** |
-| ExtraTrees_fast | 96.00% | 95.64% | 96.17% | 95.76% |
+The sensor-mount check detects visual change relative to a captured baseline. It does not identify every sensor model in arbitrary scenes. Camera movement, occlusion, or major lighting changes can trigger a change result and require recalibration.
 
-The selected RandomForest file-level confusion matrix is:
+Person and hand detection are software pre-checks, not certified safety functions. They must not replace guards, interlocks, emergency stops, or safety-rated controllers.
 
-| actual \ predicted | normal | unbalance | misalignment | looseness |
-|---|---:|---:|---:|---:|
-| normal | 69 | 0 | 2 | 1 |
-| unbalance | 0 | 10 | 0 | 0 |
-| misalignment | 5 | 0 | 58 | 0 |
-| looseness | 0 | 0 | 0 | 80 |
+## Recorded Demo path
 
-Correct files: **217 / 225**.
+Recorded Demo uses the repository's physical CSV recordings. It continuously replays files for the selected condition until Stop is pressed. The fixed-view digital-twin vision screen is a deterministic visualization/configuration surface, not a claim that the rendered scene is a camera measurement.
 
-Per-class file-level results are committed in `docs/evaluation/file_classification_report.csv`.
-
-## 6. Runtime evidence
-
-The application contains:
-
-- MQTT ingestion for the physical device
-- PostgreSQL telemetry/prediction/recording tables
-- FastAPI HTTP and WebSocket APIs
-- replay of bundled physical recordings
-- runtime model inference after a physical-RPM eligibility check
-- recording start/stop/download/delete functions
-- physical motor arm/start/target/stop endpoints
-- browser operations interface
-- digital-twin synchronization
-
-## 7. Claim limits
-
-The current repository does not establish that:
-
-- the classifier works unchanged on arbitrary unseen machinery;
-- the system is a certified end-of-line quality system;
-- a fixed total test cycle always completes in 2.56 seconds;
-- computer vision currently validates sensor position in this code path;
-- arbitrary industrial sensors are automatically discovered and normalized;
-- an unseen machine can immediately receive named fault diagnosis without relevant data.
-
-These limits keep the demonstrated result separate from broader product possibilities.
-
-## 8. Future directions
-
-Potential next steps, provided they are implemented and evaluated, include:
-
-- camera-based measurement-setup verification before spin testing;
-- configurable inspection recipes binding physical component, sensor stream, and optional visual ROI;
-- normal-baseline anomaly detection for new assets without labeled fault data;
-- generalized edge connectors beyond the current ESP32/MQTT node;
-- automated workflows that explain a failed inspection or trigger follow-up engineering actions.
-
-These items remain future directions until a corresponding implementation and validation are present.
+The twin animates rotor rotation and fault behavior from replay state to make the machine condition visible while preserving a fixed inspection viewpoint.
