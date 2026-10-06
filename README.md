@@ -14,11 +14,12 @@
 </p>
 
 NEXis is an end-of-line inspection prototype for rotating assemblies. A controlled spin test brings hidden dynamic faults to the surface while vibration, motor current, and RPM are captured together. The platform classifies the operating condition, visualizes the machine state, records evidence, and adds an edge-vision pre-check for personnel, sensor placement, Hall-sensor LED activity, and rotor motion.
+
 ## Why NEXis
 
 Most machine-monitoring prototypes stop at one layer: a sensor classifier, a camera detector, or a dashboard. NEXis connects the full inspection loop:
 
-**Verify setup ??run a controlled spin test ??capture synchronized vibration/current/RPM ??diagnose the condition ??visualize and record the evidence ??correct and retest.**
+**Verify setup -> run a controlled spin test -> capture synchronized vibration/current/RPM -> diagnose the condition -> visualize and record the evidence -> correct and retest.**
 
 The core distinction is integration. Sensor diagnosis, visual setup verification, controlled actuation, evidence logging, replay, and the synchronized digital twin are part of one inspection workflow rather than separate demonstrations. Physical, replay, and vision claims remain explicitly separated where their evidence differs.
 
@@ -35,7 +36,6 @@ The core distinction is integration. Sensor diagnosis, visual setup verification
 | Reproducibility | **Training code + raw evaluation outputs + CI checks** |
 
 For the exact metric scope and raw evaluation artifacts, see [Evidence](docs/EVIDENCE.md) and [Validation](docs/VALIDATION.md).
-
 
 ## Inspection loop
 
@@ -141,6 +141,7 @@ The repository includes the real sensor layout and representative fault setups u
 </p>
 
 The images above document the physical test configuration; the measured model results remain scoped to this rig and acquisition procedure.
+
 ## System architecture
 
 ```mermaid

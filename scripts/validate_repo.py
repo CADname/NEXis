@@ -28,6 +28,14 @@ SECRET_PATTERNS = {
 }
 
 HANGUL = re.compile(r'[\u3131-\u318e\uac00-\ud7a3]')
+ENCODING_ARTIFACTS = {
+    'unicode replacement character': '\ufffd',
+    'mojibake marker â': 'â',
+    'mojibake marker Ã': 'Ã',
+    'mojibake marker Â': 'Â',
+}
+ENCODING_QQ_SUFFIXES = {'.md', '.html', '.txt'}
+
 PROJECT_VERSION_PATH = re.compile(r'(?i)(?:^|[/_-])v?\d+_\d+_\d+(?:[/_.-]|$)')
 REQUIRED = [
     'README.md',
@@ -108,6 +116,11 @@ def main() -> int:
 
         if HANGUL.search(text):
             failures.append(f'non-English Hangul text: {rel_text}')
+        for label, marker in ENCODING_ARTIFACTS.items():
+            if marker in text:
+                failures.append(f'possible encoding artifact ({label}) in {rel_text}')
+        if path.suffix.lower() in ENCODING_QQ_SUFFIXES and '??' in text:
+            failures.append(f'possible encoding artifact (double question mark) in {rel_text}')
         lower = text.lower()
         for label, pattern in SECRET_PATTERNS.items():
             if pattern.search(text):
