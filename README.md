@@ -14,8 +14,30 @@
 </p>
 
 NEXis is an end-of-line inspection prototype for rotating assemblies. A controlled spin test brings hidden dynamic faults to the surface while vibration, motor current, and RPM are captured together. The platform classifies the operating condition, visualizes the machine state, records evidence, and adds an edge-vision pre-check for personnel, sensor placement, Hall-sensor LED activity, and rotor motion.
+## Why NEXis
 
-## What NEXis does
+Most machine-monitoring prototypes stop at one layer: a sensor classifier, a camera detector, or a dashboard. NEXis connects the full inspection loop:
+
+**Verify setup ??run a controlled spin test ??capture synchronized vibration/current/RPM ??diagnose the condition ??visualize and record the evidence ??correct and retest.**
+
+The core distinction is integration. Sensor diagnosis, visual setup verification, controlled actuation, evidence logging, replay, and the synchronized digital twin are part of one inspection workflow rather than separate demonstrations. Physical, replay, and vision claims remain explicitly separated where their evidence differs.
+
+## Proof at a glance
+
+| Evidence | Current repository |
+|---|---:|
+| Physical recordings | **225** |
+| LOFO file-level accuracy | **96.44%** |
+| LOFO file-level macro-F1 | **97.05%** |
+| Diagnosed conditions | **4** |
+| Physical signals | **Vibration + current + RPM** |
+| Edge vision | **Person + hand zones + Hall LED + rotor motion + sensor-mount baseline** |
+| Reproducibility | **Training code + raw evaluation outputs + CI checks** |
+
+For the exact metric scope and raw evaluation artifacts, see [Evidence](docs/EVIDENCE.md) and [Validation](docs/VALIDATION.md).
+
+
+## Inspection loop
 
 ```mermaid
 flowchart LR
@@ -109,6 +131,16 @@ The repository includes the physical recordings, training code, model artifact, 
 
 The evaluation uses **leave-one-file-out (LOFO)** validation so windows from the held-out recording never enter the training set for that fold. These metrics describe the supplied physical test rig and dataset; they are not a claim of universal transfer to arbitrary unseen machines.
 
+## Physical evidence
+
+The repository includes the real sensor layout and representative fault setups used for the rotating-machine recordings.
+
+<p align="center">
+  <img src="docs/images/sensor_layout.png" alt="NEXis sensor layout on the physical rotating-machine rig" width="48%">
+  <img src="docs/images/fault_setup_examples.png" alt="Representative NEXis physical fault setups" width="48%">
+</p>
+
+The images above document the physical test configuration; the measured model results remain scoped to this rig and acquisition procedure.
 ## System architecture
 
 ```mermaid
