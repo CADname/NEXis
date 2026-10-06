@@ -29,10 +29,10 @@ SECRET_PATTERNS = {
 
 HANGUL = re.compile(r'[\u3131-\u318e\uac00-\ud7a3]')
 ENCODING_ARTIFACTS = {
-    'unicode replacement character': '\ufffd',
-    'mojibake marker â': 'â',
-    'mojibake marker Ã': 'Ã',
-    'mojibake marker Â': 'Â',
+    'unicode replacement character': '\\ufffd',
+    'mojibake marker U+00E2': '\\u00e2',
+    'mojibake marker U+00C3': '\\u00c3',
+    'mojibake marker U+00C2': '\\u00c2',
 }
 ENCODING_QQ_SUFFIXES = {'.md', '.html', '.txt'}
 
