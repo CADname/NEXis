@@ -2,7 +2,7 @@
 
 ## What problem does NEXis solve?
 
-NEXis provides a repeatable spin-inspection workflow for rotating assemblies. It combines synchronized sensor data, machine state, vision pre-checks, AI diagnosis, and inspection evidence in one interface.
+NEXis provides a repeatable end-of-line spin-inspection workflow for rotating assemblies after assembly and before product release. It combines setup verification, synchronized sensor data, controlled machine state, AI diagnosis, and inspection evidence in one interface so a normal result can become a pass candidate and a detected fault can be corrected and retested.
 
 ## Which signals are used for condition diagnosis?
 

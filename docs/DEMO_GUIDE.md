@@ -8,7 +8,7 @@ The strongest demonstration combines the real machine, the live inspection UI, V
 
 Start with the actual motor/shaft assembly and sensor placement. State the problem in one sentence:
 
-> An assembled rotating system can look correct while a dynamic fault appears only after the shaft begins to spin.
+> A rotating assembly can pass a static check and still contain a dynamic fault that only appears under rotation. NEXis is designed to catch that fault during final inspection before product release.
 
 ### 0:20–0:55 — Vision pre-check
 
@@ -65,7 +65,7 @@ Show the architecture once:
 
 `Sensors / camera → edge → MQTT / FastAPI → AI → database / WebSocket → inspection UI + digital twin`
 
-End on the inspection result rather than a framework list.
+End on the production decision: pass candidate, or inspect/correct/retest. Do not end on a framework list.
 
 ## Presentation accuracy
 

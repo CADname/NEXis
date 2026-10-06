@@ -2,27 +2,28 @@
   <img src="app/web/assets/nexis_logo.png" alt="NEXis" width="360">
 </p>
 
-# NEXis — AI Machine Commissioning & Inspection
+# NEXis - AI End-of-Line Inspection for Rotating Assemblies
 
 <p align="center">
   <strong>Spin. Sense. See. Diagnose.</strong><br>
-  A connected inspection platform for rotating machinery that combines multi-sensor diagnosis, vision safety checks, controlled spin testing, and a synchronized digital twin.
+  A connected end-of-line inspection platform that verifies rotating assemblies with vision pre-checks, controlled spin testing, multi-sensor AI diagnosis, and a synchronized digital twin.
 </p>
 
 <p align="center">
   <img src="docs/images/nexis_hero.png" alt="NEXis physical inspection platform" width="920">
 </p>
 
-NEXis is an end-of-line inspection prototype for rotating assemblies. A controlled spin test brings hidden dynamic faults to the surface while vibration, motor current, and RPM are captured together. The platform classifies the operating condition, visualizes the machine state, records evidence, and adds an edge-vision pre-check for personnel, sensor placement, Hall-sensor LED activity, and rotor motion.
+NEXis is an end-of-line inspection prototype for rotating assemblies, intended for the final inspection step after assembly and before product release. A controlled spin test brings hidden dynamic faults to the surface while vibration, motor current, and RPM are captured together. The platform classifies the operating condition, visualizes the machine state, records evidence, and adds an edge-vision pre-check for personnel, sensor placement, Hall-sensor LED activity, and rotor motion.
 
-## Why NEXis
+## Problem and approach
 
-Most machine-monitoring prototypes stop at one layer: a sensor classifier, a camera detector, or a dashboard. NEXis connects the full inspection loop:
+A rotating assembly can look correct at rest and still contain unbalance, misalignment, or fastener looseness that only becomes visible after the shaft begins to rotate. The final-inspection problem is therefore not just detecting a fault: the setup must be verified, the assembly must be exercised under a controlled condition, synchronized evidence must be captured, and the result must support a clear release-or-rework decision.
 
-**Verify setup -> run a controlled spin test -> capture synchronized vibration/current/RPM -> diagnose the condition -> visualize and record the evidence -> correct and retest.**
+NEXis connects that sequence into one inspection workflow:
 
-The core distinction is integration. Sensor diagnosis, visual setup verification, controlled actuation, evidence logging, replay, and the synchronized digital twin are part of one inspection workflow rather than separate demonstrations. Physical, replay, and vision claims remain explicitly separated where their evidence differs.
+**Verify setup -> run a controlled spin test -> capture synchronized vibration/current/RPM -> diagnose the condition -> visualize and record the evidence -> pass candidate or inspect/correct/retest.**
 
+Vision setup verification, sensor diagnosis, controlled actuation, evidence logging, replay, and the synchronized digital twin are integrated in one workflow. Physical, replay, and vision claims remain explicitly separated where their evidence differs.
 ## Proof at a glance
 
 | Evidence | Current repository |
