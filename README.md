@@ -6,41 +6,79 @@
 
 <p align="center">
   <strong>Spin. Sense. See. Diagnose.</strong><br>
-  A connected end-of-line inspection platform for rotating assemblies using multi-sensor diagnosis, local machine vision, controlled spin testing, and a synchronized digital twin.
+  A short controlled trial run before shipment to catch hidden dynamic faults that static inspection can miss.
 </p>
 
 <p align="center">
   <a href="http://nexisai.duckdns.org"><strong>Live Demo</strong></a>
   &nbsp;·&nbsp;
   <a href="https://youtu.be/6Vdj4-uL7Y0"><strong>Demo Video</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/CADname/NEXis/actions/workflows/ci.yml"><strong>CI</strong></a>
 </p>
 
 <p align="center">
   <img src="docs/images/nexis_hero.png" alt="NEXis physical inspection platform" width="920">
 </p>
 
-NEXis is an engineering prototype for the final inspection step after assembly and before product release. It combines a controlled spin test with synchronized vibration, motor-current, and RPM measurements. A local Windows vision process verifies the inspection area and sensor setup, while the server provides diagnosis, recording, replay, control, history, and a synchronized digital twin through one browser interface.
+## The problem
 
-## Inspection workflow
+Final inspection often checks whether a product is assembled correctly while it is stationary. For rotating assemblies, that can miss faults that appear only when the machine actually runs: **unbalance, misalignment, looseness, abnormal vibration, or other dynamic behavior**.
 
-**Verify setup -> run a controlled spin test -> capture synchronized vibration/current/RPM -> diagnose the operating condition -> review visual and sensor evidence -> pass candidate or inspect/correct/retest.**
+A product can therefore look acceptable at rest and still reveal a problem only after it starts rotating.
 
-The application separates two workspaces:
+## The solution
 
-- **Physical Station** — live ESP32 telemetry, motor control, AI diagnosis, Vision Safety, recording, event history, and a synchronized digital twin.
-- **Recorded Demo** — repeatable replay of physical CSV recordings with the same diagnosis and visualization path, isolated from physical motor control.
+**NEXis performs a short controlled trial run immediately before shipment.** During that run, it synchronously measures vibration, motor current, and RPM, then uses machine learning to classify the operating condition. A local vision system verifies the inspection area, moving intrusions, rotor motion, Hall-sensor LED activity, and sensor mounting conditions.
 
-## Hardware wiring
+The result is one browser-based inspection workflow for:
 
-The physical rig wiring and ESP32 GPIO assignments are documented in [Hardware Wiring](docs/HARDWARE.md).
+**setup verification -> controlled spin test -> synchronized sensing -> AI diagnosis -> visual evidence -> pass candidate or inspect/correct/retest**
 
-| Signal | ESP32 pin |
+## Evidence at a glance
+
+| Evidence | Result |
 |---|---:|
-| Hall RPM | GPIO 32 |
-| ACS712 analog output | GPIO 36 |
-| BTS7960 RPWM / LPWM | GPIO 25 / GPIO 26 |
-| BTS7960 R_EN / L_EN | GPIO 27 / GPIO 14 |
-| ADXL345 SDA / SCL | GPIO 21 / GPIO 22 |
+| Physical recordings | **225** |
+| Correct LOFO files | **217 / 225** |
+| File-level accuracy | **96.44%** |
+| File-level macro-F1 | **97.05%** |
+| Conditions | **4** |
+| Sampling rate | **100 Hz** |
+| Window size | **256 samples / 2.56 s** |
+| Classifier | **RandomForest, 220 trees** |
+
+The evaluation uses **leave-one-file-out (LOFO)** validation so windows from the held-out recording never enter training for that fold. Metrics are scoped to the supplied rig, acquisition procedure, and dataset.
+
+## Watch the physical demo
+
+<p align="center">
+  <a href="https://youtu.be/6Vdj4-uL7Y0">
+    <img src="https://img.youtube.com/vi/6Vdj4-uL7Y0/maxresdefault.jpg" alt="Watch the NEXis demo video" width="900">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://youtu.be/6Vdj4-uL7Y0"><strong>Watch the demo on YouTube</strong></a>
+</p>
+
+## How NEXis works
+
+1. **Verify the setup** — confirm the hazard zone, camera view, rotor ROI, Hall LED ROI, and sensor-mount ROIs.
+2. **Run a short controlled spin test** — command and monitor the rotating test rig through the Physical Station workspace.
+3. **Capture synchronized signals** — ADXL345 vibration, ACS712 motor current, and Hall-sensor RPM are streamed through ESP32.
+4. **Diagnose the operating condition** — the RandomForest model classifies Normal, Unbalance, Misalignment, or Fastener Looseness.
+5. **Check visual evidence** — local edge vision evaluates person/hand intrusion, generic moving objects, rotor motion, Hall LED activity, and sensor-mount changes.
+6. **Review and act** — the dashboard combines live telemetry, diagnosis, vision status, recording/history, and a synchronized digital twin.
+
+## What makes it different
+
+- **Designed for the final pre-shipment trial run**, not only long-term predictive maintenance.
+- **Detects faults under motion**, where static inspection can miss dynamic problems.
+- **Combines multiple physical signals** instead of relying on vibration alone.
+- **Adds local machine vision** for inspection-area and setup verification.
+- **Connects the full physical path** from sensors and motor control to cloud ingestion, AI inference, storage, browser UI, and digital twin.
+- **Includes reproducible evidence**: physical CSV recordings, training code, model artifact, raw evaluation outputs, and CI validation.
 
 ## Physical inspection stack
 
@@ -112,8 +150,6 @@ The repository includes the physical recordings, training code, model artifact, 
   <img src="docs/images/confusion_matrix.png" alt="NEXis leave-one-file-out confusion matrix" width="610">
 </p>
 
-The evaluation uses **leave-one-file-out (LOFO)** validation so windows from the held-out recording never enter the training set for that fold. These metrics are scoped to the supplied rig, acquisition procedure, and dataset.
-
 ## Architecture
 
 ```mermaid
@@ -146,11 +182,28 @@ flowchart TB
     VISION -->|Status + preview| API
 ```
 
-See [Architecture](docs/ARCHITECTURE.md), [Evidence](docs/EVIDENCE.md), and [Validation](docs/VALIDATION.md) for implementation and claim boundaries.
+See [Architecture](docs/ARCHITECTURE.md), [Evidence](docs/EVIDENCE.md), and [Validation](docs/VALIDATION.md) for implementation details and claim boundaries.
+
+## Hardware and wiring
+
+The physical rig wiring and ESP32 GPIO assignments are documented in [Hardware Wiring](docs/HARDWARE.md).
+
+| Signal | ESP32 pin |
+|---|---:|
+| Hall RPM | GPIO 32 |
+| ACS712 analog output | GPIO 36 |
+| BTS7960 RPWM / LPWM | GPIO 25 / GPIO 26 |
+| BTS7960 R_EN / L_EN | GPIO 27 / GPIO 14 |
+| ADXL345 SDA / SCL | GPIO 21 / GPIO 22 |
 
 ## Recorded Demo
 
-The Recorded Demo is isolated from physical motor-control endpoints. Selecting a condition starts continuous playback of matching physical CSV recordings until **Stop** is pressed. The browser uses the same diagnosis and visualization pipeline while the digital twin follows replay RPM and condition state.
+NEXis separates two workspaces:
+
+- **Physical Station** — live ESP32 telemetry, motor control, AI diagnosis, Vision Safety, recording, event history, and synchronized digital twin.
+- **Recorded Demo** — repeatable replay of physical CSV recordings with the same diagnosis and visualization path, isolated from physical motor control.
+
+Selecting a condition in Recorded Demo starts continuous playback of matching physical CSV recordings until **Stop** is pressed. The digital twin follows replay RPM and condition state.
 
 The Vision Safety Demo uses a fixed digital-twin viewpoint so hazard and sensor regions stay spatially stable while the machine remains animated from replay data.
 
@@ -177,6 +230,7 @@ scripts/
 docs/
   ARCHITECTURE.md
   EVIDENCE.md
+  HARDWARE.md
   TECHNICAL_QA.md
   VALIDATION.md
   evaluation/
