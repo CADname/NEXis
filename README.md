@@ -10,6 +10,12 @@
 </p>
 
 <p align="center">
+  <a href="http://nexisai.duckdns.org"><strong>Live Demo</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://youtu.be/6Vdj4-uL7Y0"><strong>Demo Video</strong></a>
+</p>
+
+<p align="center">
   <img src="docs/images/nexis_hero.png" alt="NEXis physical inspection platform" width="920">
 </p>
 
