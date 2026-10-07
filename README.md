@@ -30,6 +30,18 @@ The application separates two workspaces:
 - **Physical Station** — live ESP32 telemetry, motor control, AI diagnosis, Vision Safety, recording, event history, and a synchronized digital twin.
 - **Recorded Demo** — repeatable replay of physical CSV recordings with the same diagnosis and visualization path, isolated from physical motor control.
 
+## Hardware wiring
+
+The physical rig wiring and ESP32 GPIO assignments are documented in [Hardware Wiring](docs/HARDWARE.md).
+
+| Signal | ESP32 pin |
+|---|---:|
+| Hall RPM | GPIO 32 |
+| ACS712 analog output | GPIO 36 |
+| BTS7960 RPWM / LPWM | GPIO 25 / GPIO 26 |
+| BTS7960 R_EN / L_EN | GPIO 27 / GPIO 14 |
+| ADXL345 SDA / SCL | GPIO 21 / GPIO 22 |
+
 ## Physical inspection stack
 
 | Layer | Implementation |
