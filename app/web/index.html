@@ -144,79 +144,65 @@
 </section>
 <section class="page" id="vision">
 <div data-workspace-only="physical" id="physicalVisionWorkspace">
-<div class="subpage-toolbar"><div><span class="section-kicker"></span><h2>Vision Safety &amp; Installation Check</h2></div><div class="toolbar-actions"><button class="op-button secondary" id="visionRefresh">Refresh Frame</button><button class="op-button secondary" id="visionReloadConfig">Reload Saved Setup</button></div></div>
+<div class="subpage-toolbar vision-page-toolbar"><div><span class="section-kicker"></span><h2>Vision Safety</h2></div><div class="toolbar-actions"><button class="op-button secondary" id="visionRefresh">Refresh Frame</button><button class="op-button secondary" id="visionReloadConfig">Reload Setup</button></div></div>
 <div class="vision-kpi-grid">
-<article class="industrial-kpi"><small>Vision Edge</small><div class="kpi-line"><b class="status-value" id="visionEdgeState">Offline</b></div><em id="visionEdgeAge">Waiting for Windows Vision Edge</em></article>
+<article class="industrial-kpi"><small>Edge</small><div class="kpi-line"><b class="status-value" id="visionEdgeState">Offline</b></div><em id="visionEdgeAge">Waiting</em></article>
 <article class="industrial-kpi"><small>Camera</small><div class="kpi-line"><b class="status-value" id="visionCameraState">Waiting</b></div><em id="visionCameraMeta">No Frame</em></article>
-<article class="industrial-kpi"><small>Person</small><div class="kpi-line"><b id="visionPersonCount">—</b><span class="kpi-unit">Detected</span></div><em id="visionPersonZone">Checking</em></article>
-<article class="industrial-kpi"><small>Hand</small><div class="kpi-line"><b id="visionHandCount">—</b><span class="kpi-unit">Detected</span></div><em id="visionHandZone">Checking</em></article>
-<article class="industrial-kpi"><small>Hall Sensor LED</small><div class="kpi-line"><b class="status-value" id="visionHallLed">—</b></div><em id="visionHallLedMeta">Blink Check</em></article>
-<article class="industrial-kpi"><small>Rotor</small><div class="kpi-line"><b class="status-value" id="visionRotor">—</b></div><em id="visionRotorMeta">Motion Check</em></article>
-<article class="industrial-kpi"><small>Sensor Mounts</small><div class="kpi-line"><b class="status-value" id="visionMountSummary">—</b></div><em>ADXL345 · ACS712 · Hall Sensor</em></article>
+<article class="industrial-kpi vision-safety-kpi"><small>Safety</small><div class="kpi-line"><b class="status-value" id="visionSafetyState">Waiting</b></div><em id="visionSafetyMeta">Vision decision</em></article>
+<article class="industrial-kpi"><small>Person</small><div class="kpi-line"><b id="visionPersonCount">—</b><span class="kpi-unit">det.</span></div><em id="visionPersonZone">Checking</em></article>
+<article class="industrial-kpi"><small>Hand</small><div class="kpi-line"><b id="visionHandCount">—</b><span class="kpi-unit">det.</span></div><em id="visionHandZone">Checking</em></article>
+<article class="industrial-kpi"><small>Motion</small><div class="kpi-line"><b id="visionMotionCount">—</b><span class="kpi-unit">det.</span></div><em id="visionMotionZone">Checking</em></article>
+<article class="industrial-kpi"><small>LED</small><div class="kpi-line"><b class="status-value" id="visionHallLed">—</b></div><em id="visionHallLedMeta">Blink</em></article>
+<article class="industrial-kpi"><small>Rotor</small><div class="kpi-line"><b class="status-value" id="visionRotor">—</b></div><em id="visionRotorMeta">Motion</em></article>
+<article class="industrial-kpi"><small>Mounts</small><div class="kpi-line"><b class="status-value" id="visionMountSummary">—</b></div><em>3 sensors</em></article>
 </div>
-<div class="vision-layout">
+<div class="vision-layout vision-layout-compact">
 <article class="panel vision-camera-panel">
-<div class="panel-head"><div><small></small><h3>Hazard Zone &amp; Sensor ROI Setup</h3></div><span class="status-tag warning" id="visionConfigBadge">Not Configured</span></div>
+<div class="panel-head vision-main-head"><div><small>LIVE CAMERA</small><h3>Vision Monitor &amp; Setup</h3></div><span class="status-tag warning" id="visionConfigBadge">Not Configured</span></div>
+<div class="vision-camera-bar">
+<div class="vision-camera-bar-main"><span class="status-tag warning" id="visionConnectorBadge">Offline</span><div class="vision-camera-choices" id="visionCameraChoices"><span class="vision-camera-empty">Start Vision Edge</span></div></div>
+<div class="vision-camera-actions"><button class="op-button secondary" disabled="" id="visionCameraRefresh" type="button">Refresh</button><button class="op-button danger" disabled="" id="visionCameraOff" type="button">Off</button></div>
+<small id="visionCameraChoiceHint">Select a camera.</small><small class="vision-edge-hidden" id="visionEdgeHint">Vision Edge status</small>
+</div>
 <div class="vision-stage" id="visionStage">
 <img alt="" aria-hidden="true" draggable="false" id="visionFrameImg"/>
 <canvas id="visionOverlay"></canvas>
-<div class="vision-no-frame" id="visionNoFrame"><div class="vision-no-frame-inner"><b id="visionNoFrameTitle">Waiting for Camera Frame</b><span id="visionNoFrameText">The Windows Vision Edge is sending preview frames.</span></div></div>
+<div class="vision-no-frame" id="visionNoFrame"><div class="vision-no-frame-inner"><b id="visionNoFrameTitle">Waiting for Camera</b><span id="visionNoFrameText">Select a camera above.</span></div></div>
 </div>
-<div class="vision-setup-status"><b id="visionToolLabel">View</b><span id="visionToolHelp">Saved settings load automatically. Choose an item below to edit.</span></div>
+<div class="vision-setup-status"><b id="visionToolLabel">View</b><span id="visionToolHelp">Select an item to edit.</span></div>
 <div class="vision-tool-grid">
-<button class="op-button secondary vision-tool" data-vision-tool="hazard">1. Hazard Zone</button>
-<button class="op-button secondary vision-tool" data-vision-tool="hall_led">2. Hall Sensor LED</button>
-<button class="op-button secondary vision-tool" data-vision-tool="rotor">3. Rotor ROI</button>
-<button class="op-button secondary vision-tool" data-vision-tool="adxl345">4. ADXL345 Mount</button>
-<button class="op-button secondary vision-tool" data-vision-tool="acs712">5. ACS712 Mount</button>
-<button class="op-button secondary vision-tool" data-vision-tool="hall_sensor">6. Hall Sensor Mount</button>
+<button class="op-button secondary vision-tool" data-vision-tool="hazard">Hazard Zone</button>
+<button class="op-button secondary vision-tool" data-vision-tool="hall_led">Hall LED</button>
+<button class="op-button secondary vision-tool" data-vision-tool="rotor">Rotor</button>
+<button class="op-button secondary vision-tool" data-vision-tool="adxl345">ADXL345</button>
+<button class="op-button secondary vision-tool" data-vision-tool="acs712">ACS712</button>
+<button class="op-button secondary vision-tool" data-vision-tool="hall_sensor">Hall Sensor</button>
 </div>
 <div class="vision-actions">
-<label class="vision-margin"><span>Warning Margin</span><input id="visionWarningPx" max="500" min="0" step="10" type="number" value="90"/><small>Pixels outside the hazard zone</small></label>
-<button class="op-button secondary" id="visionUndoPoint">Undo Point</button>
-<button class="op-button secondary" id="visionCancelEdit">Cancel Edit</button>
-<button class="op-button success" id="visionSaveConfig">Save Setup</button>
-<button class="op-button primary" id="visionCaptureBaseline">Capture Sensor Baseline</button>
-<button class="op-button danger" id="visionResetConfig">Reset Setup</button>
+<label class="vision-margin"><span>Warning Margin</span><input id="visionWarningPx" max="500" min="0" step="10" type="number" value="90"/><small>px</small></label>
+<button class="op-button secondary" id="visionUndoPoint">Undo</button>
+<button class="op-button secondary" id="visionCancelEdit">Cancel</button>
+<button class="op-button success" id="visionSaveConfig">Save</button>
+<button class="op-button primary" id="visionCaptureBaseline">Capture Baseline</button>
+<button class="op-button danger" id="visionResetConfig">Reset</button>
 </div>
-<p class="vision-note">Define the hazard zone with at least three points. Draw rectangles for sensors, the Hall LED, and the rotor. Settings persist until reset. Vision inference runs on the edge and synchronized results are sent to the server.</p>
 </article>
-<aside class="vision-side-stack">
-<article class="panel vision-status-panel"><div class="panel-head"><div><small></small><h3>Vision Detection Status</h3></div></div>
+<aside class="vision-side-stack vision-side-compact">
+<article class="panel vision-status-panel"><div class="panel-head"><div><small>LIVE RESULTS</small><h3>Detection</h3></div></div>
 <div class="vision-check-list">
-<div><span>Person / Hazard-Zone Intrusion</span><b id="visionPersonDetail">Waiting</b></div>
-<div><span>Hand / Hazard-Zone Intrusion</span><b id="visionHandDetail">Waiting</b></div>
-<div><span>Hall Sensor LED Blink</span><b id="visionLedDetail">Waiting</b></div>
-<div><span>Rotor Motion</span><b id="visionRotorDetail">Waiting</b></div>
-<div><span>ADXL345 Mount Status</span><b id="visionAdxlStatus">Waiting</b></div>
-<div><span>ACS712 Mount Status</span><b id="visionAcsStatus">Optional</b></div>
-<div><span>Hall Sensor Mount Status</span><b id="visionHallStatus">Optional</b></div>
-</div>
-</article>
-<article class="panel vision-guide-panel"><div class="panel-head"><div><small></small><h3>Setup Guide</h3></div></div>
-<div class="vision-guide-list">
-<div><b>Hazard Zone</b><span>Outline the area around the rotating machine that people must not enter.</span></div>
-<div><b>Hall Sensor LED</b><span>Draw a tight ROI around the Hall sensor LED. Blink detection uses repeated brightness changes rather than LED color, so red or green LEDs can be used.</span></div>
-<div><b>Rotor</b><span>Draw around a moving pulley, disk, or another high-contrast rotating feature.</span></div>
-<div><b>ADXL345</b><span>Include the accelerometer and its mounting surface. The live view is compared with the saved baseline.</span></div>
-<div><b>ACS712 / Hall Sensor</b><span>Draw each visible sensor mounting area. This checks visual changes against the baseline; it is not automatic sensor-type recognition.</span></div>
-</div>
-</article>
-<article class="panel vision-edge-panel"><div class="panel-head"><div><small>Camera</small><h3>Select Camera</h3></div><span class="status-tag warning" id="visionConnectorBadge">Offline</span></div>
-<div class="vision-camera-picker">
-<div class="vision-camera-choices" id="visionCameraChoices"><span class="vision-camera-empty">Available cameras appear after the Vision Edge starts.</span></div>
-<div class="vision-camera-actions"><button class="op-button danger" disabled="" id="visionCameraOff" type="button">Turn Camera Off</button></div>
-<small id="visionCameraChoiceHint">Choose a camera. Turning the camera off keeps the Vision Edge connected.</small>
-</div>
-<div class="vision-connector-simple">
-<b>Windows Vision Edge</b>
-<span>When started, it discovers cameras on this PC automatically. Vision processing runs locally and detection results are synchronized with the server.</span>
-<small id="visionEdgeHint">The camera preview is handled by the edge connector.</small>
+<div class="vision-check-primary"><span>Safety</span><b id="visionSafetyDetail">Waiting</b></div>
+<div><span>Person</span><b id="visionPersonDetail">Waiting</b></div>
+<div><span>Hand</span><b id="visionHandDetail">Waiting</b></div>
+<div><span>Object / Motion</span><b id="visionMotionDetail">Waiting</b></div>
+<div><span>LED Blink</span><b id="visionLedDetail">Waiting</b></div>
+<div><span>Rotor</span><b id="visionRotorDetail">Waiting</b></div>
+<div><span>ADXL345</span><b id="visionAdxlStatus">Waiting</b></div>
+<div><span>ACS712</span><b id="visionAcsStatus">Optional</b></div>
+<div><span>Hall Sensor</span><b id="visionHallStatus">Optional</b></div>
 </div>
 </article>
 </aside>
-</div>
-</div>
+</div></div>
 <div class="demo-vision-workspace" data-workspace-only="demo" id="demoVisionWorkspace">
 <div class="subpage-toolbar"><div><span class="section-kicker"></span><h2>Vision Safety Demo · Fixed Digital Twin</h2></div><div class="toolbar-actions"><button class="op-button secondary" id="demoVisionReloadConfig">Reload Saved Setup</button></div></div>
 <div class="vision-kpi-grid demo-vision-kpis">

@@ -14,7 +14,7 @@ TEXT_SUFFIXES = {
 
 FORBIDDEN_NAMES = {
     '.env', 'secrets.h', 'passwd', '.bash_history', '.zsh_history',
-    'id_rsa', 'id_ed25519', 'server.key',
+    'id_rsa', 'id_ed25519', 'server.key', 'README_FIRST.txt', 'SHA256SUMS.txt',
 }
 FORBIDDEN_SUFFIXES = {'.p12', '.pfx', '.jks', '.sqlite', '.sqlite3', '.db', '.tar', '.tgz', '.zip', '.7z', '.rar'}
 
@@ -35,8 +35,9 @@ ENCODING_ARTIFACTS = {
     'mojibake marker U+00C2': chr(0x00C2),
 }
 ENCODING_QQ_SUFFIXES = {'.md', '.html', '.txt'}
-
 PROJECT_VERSION_PATH = re.compile(r'(?i)(?:^|[/_-])v?\d+_\d+_\d+(?:[/_.-]|$)')
+RELEASE_TEXT = re.compile(r'(?i)(?:\bv\d+\.\d+(?:\.\d+)?\b|[?&]v=\d+\.\d+(?:\.\d+)?)')
+
 REQUIRED = [
     'README.md',
     'SECURITY.md',
@@ -49,15 +50,19 @@ REQUIRED = [
     'edge_vision/vision_edge_agent.py',
     'edge_vision/yolo11n.pt',
     'edge_vision/README.md',
+    'edge_vision/START_NEXIS_VISION.ps1',
+    'edge_vision/START_NEXIS_VISION.vbs',
+    'edge_vision/INSTALL_VISION_EDGE.bat',
+    'edge_vision/requirements_core.txt',
+    'edge_vision/requirements_ai_optional.txt',
+    'edge_vision/server_url.example.txt',
     'firmware/NEXis_ESP32_Physical/NEXis_ESP32_Physical.ino',
     'firmware/NEXis_ESP32_Physical/secrets.example.h',
     'training/reproduce_training.py',
     'docs/EVIDENCE.md',
     'docs/ARCHITECTURE.md',
-    'docs/DEMO_GUIDE.md',
     'docs/TECHNICAL_QA.md',
     'docs/VALIDATION.md',
-    'docs/images/vision_safety_demo.png',
 ]
 
 
@@ -72,13 +77,17 @@ def main() -> int:
         if not (ROOT / rel_s).exists():
             failures.append(f'missing required file: {rel_s}')
 
-    forbidden_old_paths = [
+    removed_paths = [
+        ROOT / 'docs/DEMO_GUIDE.md',
+        ROOT / 'edge_vision/requirements.txt',
+        ROOT / 'edge_vision/START_NEXIS_VISION_FALLBACK.cmd',
         ROOT / '.github/workflows/repository-check.yml',
         ROOT / 'scripts/repository_check.py',
     ]
-    for p in forbidden_old_paths:
+    for p in removed_paths:
         if p.exists():
-            failures.append(f'unexpected repository helper: {p.relative_to(ROOT)}')
+            failures.append(f'unexpected legacy/release helper: {p.relative_to(ROOT)}')
+
     firmware_root = ROOT / 'firmware'
     if firmware_root.exists():
         for p in firmware_root.iterdir():
@@ -92,11 +101,11 @@ def main() -> int:
         rel_text = rel.as_posix()
         lower_name = path.name.lower()
 
-        if any(part in {'__pycache__', '.pytest_cache', '.mypy_cache', '.venv', 'venv'} for part in rel.parts):
+        if any(part in {'__pycache__', '.pytest_cache', '.mypy_cache', '.venv', 'venv', 'vision_edge_state'} for part in rel.parts):
             failures.append(f'generated environment/cache committed: {rel_text}')
             continue
         if path.name in FORBIDDEN_NAMES:
-            failures.append(f'forbidden credential filename: {rel_text}')
+            failures.append(f'forbidden deployment/release filename: {rel_text}')
         if path.suffix.lower() in FORBIDDEN_SUFFIXES or lower_name.endswith(('.tar.gz', '.tar.bz2', '.tar.xz')):
             failures.append(f'archive/database artifact committed: {rel_text}')
         if lower_name.endswith(('.key', '.pem')):
@@ -121,12 +130,14 @@ def main() -> int:
                 failures.append(f'possible encoding artifact ({label}) in {rel_text}')
         if path.suffix.lower() in ENCODING_QQ_SUFFIXES and '??' in text:
             failures.append(f'possible encoding artifact (double question mark) in {rel_text}')
-        lower = text.lower()
         for label, pattern in SECRET_PATTERNS.items():
             if pattern.search(text):
                 if label == 'private key' and path.suffix.lower() == '.md':
                     continue
                 failures.append(f'{label} pattern in {rel_text}')
+        release_scope = (rel_text == 'README.md' or rel_text == 'app/main.py' or rel_text.startswith('app/web/') or rel_text.startswith('edge_vision/') or rel_text.startswith('firmware/') or (rel_text.startswith('docs/') and path.suffix.lower() == '.md'))
+        if release_scope and RELEASE_TEXT.search(text):
+            failures.append(f'release/version-specific project text: {rel_text}')
 
     env_path = ROOT / '.env.example'
     if env_path.exists():
@@ -140,6 +151,16 @@ def main() -> int:
         if removed in main_py:
             failures.append(f'removed authentication residue remains in app/main.py: {removed}')
 
+    web_js = (ROOT / 'app/web/assets/app.js').read_text(encoding='utf-8', errors='ignore') if (ROOT / 'app/web/assets/app.js').exists() else ''
+    for removed in ("/api/logout", "role==='admin'", "Only administrators can control"):
+        if removed in web_js:
+            failures.append(f'removed authentication residue remains in app/web/assets/app.js: {removed}')
+    for implicit_locale in ('toLocaleString()', 'toLocaleTimeString()', 'toLocaleDateString()'):
+        if implicit_locale in web_js:
+            failures.append(f'implicit browser locale remains in app/web/assets/app.js: {implicit_locale}')
+    if '/api/vision/camera/refresh' not in main_py or '/api/vision/camera/refresh' not in web_js:
+        failures.append('manual Vision camera refresh is not wired through both server and browser')
+
     launcher = ROOT / 'edge_vision/START_NEXIS_VISION.ps1'
     if launcher.exists():
         launch_text = launcher.read_text(encoding='utf-8-sig', errors='ignore')
@@ -149,6 +170,14 @@ def main() -> int:
                     failures.append('hard-coded public server IP in Vision Edge launcher')
             except ValueError:
                 failures.append('invalid hard-coded IP in Vision Edge launcher')
+
+    agent = ROOT / 'edge_vision/vision_edge_agent.py'
+    if agent.exists():
+        agent_text = agent.read_text(encoding='utf-8', errors='ignore')
+        if 'return [0, 1, 2, 3, 4, 5]' in agent_text:
+            failures.append('Windows anonymous camera probing fallback remains enabled')
+        if 'EDGE_VERSION' in agent_text or 'edge_version' in agent_text:
+            failures.append('release-specific Vision Edge version field remains')
 
     if failures:
         print('NEXIS REPOSITORY VALIDATION: FAILED')

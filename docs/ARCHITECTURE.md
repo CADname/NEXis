@@ -2,7 +2,7 @@
 
 ## Overview
 
-NEXis separates the **physical inspection path**, **edge-vision path**, and **recorded demonstration path** while presenting them through one operations interface.
+NEXis separates the physical inspection path, Windows edge-vision path, and recorded replay path while presenting them through one operations interface.
 
 ```mermaid
 flowchart TB
@@ -38,64 +38,50 @@ flowchart TB
 
 ## Physical Station
 
-The ESP32 streams vibration, current, RPM, and control state to the cloud through MQTT. The backend accepts physical telemetry even at zero RPM so operators can observe idle behavior and record state.
+The ESP32 streams vibration, current, RPM, and control state through MQTT. The backend accepts physical telemetry at idle so operators can observe the station before a spin test begins.
 
-AI inference has a separate operating-condition gate. Physical samples enter the diagnosis window only after a target RPM has been set and the actual speed reaches the configured minimum ratio. This prevents startup transients from being treated as a stable inspection window.
+AI inference has a separate operating-condition gate. Samples enter the diagnosis window only after a target RPM is set and actual speed reaches the configured minimum ratio. Motor commands use target-RPM bounds, an arming interval, command TTL, and device-online checks before publication.
 
-Motor commands are explicit server operations. The backend applies target-RPM bounds, an arming interval, command TTL, and edge-online checks before publishing commands to the ESP32.
+## Windows Vision Edge
 
-## Vision edge
-
-Camera inference is intentionally performed on the Windows machine connected to the camera.
-
-The edge process performs:
+Camera inference runs on the Windows machine connected to the camera. The edge process performs:
 
 - YOLO person detection;
-- MediaPipe hand detection;
-- hazard/warning-zone intersection checks;
-- Hall LED repeated brightness-transition detection;
-- rotor visual-motion detection;
-- sensor-mount baseline comparison;
-- camera discovery and switching.
+- MediaPipe hand detection with a motion/skin fallback when needed;
+- generic moving-object intrusion detection;
+- hazard and warning-zone evaluation;
+- Hall LED blink analysis;
+- rotor visual-motion analysis;
+- ADXL345, ACS712, and Hall-sensor mount baseline comparison;
+- camera enumeration, selection, camera-off handling, and explicit refresh.
 
-The cloud receives compact status data and a low-rate preview JPEG. The preview is for operator visibility; AI decisions are produced from the local camera frames before upload.
+On Windows, camera friendly names are enumerated before opening a stream. Linked/mobile and virtual camera names are filtered so the connector does not probe them as ordinary webcams. Camera enumeration occurs at startup and again only after the browser sends an explicit refresh request.
 
-Vision setup is stored in the server runtime volume. The user can configure and persist a hazard polygon, warning margin, Hall LED ROI, rotor ROI, and sensor-mount ROIs. Sensor baselines are captured on the edge and bound to the current server configuration revision.
+The cloud receives compact status data and a low-rate preview JPEG. Person, hand, and motion detections include box coordinates and zone/evidence values so the browser can render synchronized overlays.
+
+Vision setup is stored in the server runtime volume. The user can persist a hazard polygon, warning margin, Hall LED ROI, rotor ROI, and sensor-mount ROIs. Sensor baselines are captured on the edge and associated with the active server configuration revision.
 
 ## Recorded Demo
 
-The Recorded Demo uses the physical CSV recordings bundled with the repository but is isolated from physical motor-control endpoints.
+Recorded Demo uses the physical CSV recordings bundled with the repository and is isolated from physical motor-control endpoints. After a condition is selected, matching files replay continuously until Stop is requested.
 
-After a condition is selected, the backend continuously chooses a matching recording and replays it. At the end of a file, another recording from the same condition is selected and playback continues until Stop is requested.
-
-The demo digital twin uses replay RPM and condition state. The fixed-view Vision Safety Demo reuses the same machine geometry as an inspection frame while locking camera orbit, zoom, and pan. The machine itself remains animated:
-
-- rotor rotation follows replay RPM;
-- the Hall LED pulses while the rotor is turning;
-- unbalance adds eccentric/wobble behavior;
-- misalignment adds coupling/shaft offset behavior;
-- fastener looseness adds support/joint vibration behavior.
+The demo digital twin follows replay RPM and condition state. The fixed-view Vision Safety Demo keeps camera orbit, zoom, and pan locked while machine animation remains active.
 
 ## Diagnosis path
 
-`app/ai_model.py` implements inference-side feature extraction for the bundled classifier. A 256-sample window at 100 Hz is transformed into the feature vector expected by the model. Class probabilities are written to PostgreSQL, broadcast to the browser, and mapped to the digital-twin state.
+`app/ai_model.py` reproduces the feature pipeline expected by the bundled classifier. A 256-sample window at 100 Hz is transformed into the model feature vector. Class probabilities are stored in PostgreSQL, broadcast to the browser, and mapped to the digital-twin state.
 
 The training and evaluation pipeline is implemented in `training/reproduce_training.py`.
 
 ## Storage
 
-PostgreSQL stores telemetry, predictions, class probabilities, and recording metadata. Raw recordings created at runtime are stored under the mounted `runtime/` volume and are excluded from Git.
+PostgreSQL stores telemetry, predictions, class probabilities, and recording metadata. Raw recordings created at runtime are stored under the mounted `runtime/` volume and excluded from Git.
 
-Vision runtime state is stored under `runtime/vision/`, including configuration, edge status, preview frame, camera selection, and generated edge-token state when applicable.
+Vision runtime state is stored under `runtime/vision/`. Local Windows Vision state, logs, and sensor baselines are stored under `%LOCALAPPDATA%\NEXis\VisionEdge`.
 
 ## Network boundary
 
-The default stack exposes:
-
-- HTTP through Nginx on port 80;
-- authenticated MQTT/TLS for the physical device on port 8883.
-
-The anonymous MQTT listener remains inside the Compose network.
+The default stack exposes HTTP through Nginx on port 80 and authenticated MQTT/TLS for the physical device on port 8883. The anonymous MQTT listener remains inside the Compose network.
 
 ## Safety boundary
 

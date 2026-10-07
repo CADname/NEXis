@@ -6,56 +6,23 @@
 
 <p align="center">
   <strong>Spin. Sense. See. Diagnose.</strong><br>
-  A connected end-of-line inspection platform that verifies rotating assemblies with vision pre-checks, controlled spin testing, multi-sensor AI diagnosis, and a synchronized digital twin.
+  A connected end-of-line inspection platform for rotating assemblies using multi-sensor diagnosis, local machine vision, controlled spin testing, and a synchronized digital twin.
 </p>
 
 <p align="center">
   <img src="docs/images/nexis_hero.png" alt="NEXis physical inspection platform" width="920">
 </p>
 
-NEXis is an end-of-line inspection prototype for rotating assemblies, intended for the final inspection step after assembly and before product release. A controlled spin test brings hidden dynamic faults to the surface while vibration, motor current, and RPM are captured together. The platform classifies the operating condition, visualizes the machine state, records evidence, and adds an edge-vision pre-check for personnel, sensor placement, Hall-sensor LED activity, and rotor motion.
+NEXis is an engineering prototype for the final inspection step after assembly and before product release. It combines a controlled spin test with synchronized vibration, motor-current, and RPM measurements. A local Windows vision process verifies the inspection area and sensor setup, while the server provides diagnosis, recording, replay, control, history, and a synchronized digital twin through one browser interface.
 
-## Problem and approach
+## Inspection workflow
 
-A rotating assembly can look correct at rest and still contain unbalance, misalignment, or fastener looseness that only becomes visible after the shaft begins to rotate. The final-inspection problem is therefore not just detecting a fault: the setup must be verified, the assembly must be exercised under a controlled condition, synchronized evidence must be captured, and the result must support a clear release-or-rework decision.
+**Verify setup -> run a controlled spin test -> capture synchronized vibration/current/RPM -> diagnose the operating condition -> review visual and sensor evidence -> pass candidate or inspect/correct/retest.**
 
-NEXis connects that sequence into one inspection workflow:
+The application separates two workspaces:
 
-**Verify setup -> run a controlled spin test -> capture synchronized vibration/current/RPM -> diagnose the condition -> visualize and record the evidence -> pass candidate or inspect/correct/retest.**
-
-Vision setup verification, sensor diagnosis, controlled actuation, evidence logging, replay, and the synchronized digital twin are integrated in one workflow. Physical, replay, and vision claims remain explicitly separated where their evidence differs.
-## Proof at a glance
-
-| Evidence | Current repository |
-|---|---:|
-| Physical recordings | **225** |
-| LOFO file-level accuracy | **96.44%** |
-| LOFO file-level macro-F1 | **97.05%** |
-| Diagnosed conditions | **4** |
-| Physical signals | **Vibration + current + RPM** |
-| Edge vision | **Person + hand zones + Hall LED + rotor motion + sensor-mount baseline** |
-| Reproducibility | **Training code + raw evaluation outputs + CI checks** |
-
-For the exact metric scope and raw evaluation artifacts, see [Evidence](docs/EVIDENCE.md) and [Validation](docs/VALIDATION.md).
-
-## Inspection loop
-
-```mermaid
-flowchart LR
-    A[Assembly ready] --> B[Vision pre-check]
-    B --> C[Controlled spin test]
-    C --> D[Vibration + Current + RPM]
-    D --> E[AI condition diagnosis]
-    E --> F[Digital twin + inspection result]
-    F --> G{Decision support}
-    G -->|Normal| H[Pass candidate]
-    G -->|Fault detected| I[Inspect / correct / retest]
-```
-
-The platform provides two clearly separated workspaces:
-
-- **Physical Station** — live ESP32 telemetry, controlled motor commands, AI diagnosis, vision safety, recording, event history, and a synchronized digital twin.
-- **Recorded Demo** — repeatable replay of physical CSV recordings with continuous condition playback, AI diagnosis, animated fault behavior, and a fixed-view digital-twin vision setup.
+- **Physical Station** — live ESP32 telemetry, motor control, AI diagnosis, Vision Safety, recording, event history, and a synchronized digital twin.
+- **Recorded Demo** — repeatable replay of physical CSV recordings with the same diagnosis and visualization path, isolated from physical motor control.
 
 ## Physical inspection stack
 
@@ -65,34 +32,31 @@ The platform provides two clearly separated workspaces:
 | Motor current | ACS712 |
 | Rotational speed | Hall sensor RPM feedback |
 | Motor drive | ESP32 + BTS7960 |
-| Edge transport | MQTT / TLS |
+| Device transport | MQTT / TLS |
 | Backend | FastAPI + WebSocket |
 | Storage | PostgreSQL + runtime recordings |
 | Diagnosis | RandomForest multi-class classifier |
-| Vision | YOLO person detection + MediaPipe hand tracking + OpenCV ROI analysis |
+| Vision | YOLO + MediaPipe + OpenCV |
 | Visualization | Browser dashboard + synchronized WebGL digital twin |
 
-## Vision safety and setup verification
+## Vision Safety
 
-The Physical Station can run a Windows edge-vision connector next to the machine. Camera inference runs locally; compact status data and a low-rate preview frame are synchronized to the server.
+Camera inference runs locally on the Windows PC connected to the camera. The server receives compact detection status and a low-rate preview frame for operator visibility.
 
 Implemented checks include:
 
-- **Person detection** with YOLO.
-- **Hand detection** with MediaPipe and danger/warning-zone intersection checks.
-- **User-defined hazard polygon** and configurable warning margin.
-- **Hall sensor LED blink detection** based on repeated brightness transitions inside a configured ROI. A continuously illuminated LED is not treated as a valid blink sequence.
-- **Rotor motion detection** using local visual motion evidence inside a configured ROI.
-- **Sensor mount verification** for ADXL345, ACS712, and Hall sensor positions using a captured visual baseline and multi-frame change confirmation.
-- **Persistent setup** with saved hazard/ROI geometry, reset, and baseline recapture workflows.
+- **Person detection** with YOLO and danger/warning-zone evaluation.
+- **Hand detection** with MediaPipe, with a motion/skin fallback when the optional hand detector is unavailable.
+- **Generic moving-object intrusion detection** inside configured warning and danger regions.
+- **User-defined hazard polygon** and warning margin.
+- **Hall sensor LED blink detection** using repeated brightness transitions inside a configured ROI.
+- **Rotor motion detection** using visual motion evidence inside a configured ROI.
+- **Sensor mount verification** for ADXL345, ACS712, and Hall sensor locations using a captured visual baseline.
+- **Camera selection, camera-off control, and manual camera refresh** from the browser.
+- **Linked/mobile and virtual camera filtering** before a Windows camera stream is opened.
+- **Persistent setup and baseline state** synchronized between the server and the edge process.
 
-> Sensor mount verification is a visual baseline-change check, not generic sensor-object recognition. Camera position and lighting should remain stable after calibration.
-
-<p align="center">
-  <img src="docs/images/vision_safety_demo.png" alt="NEXis fixed-view digital-twin vision setup with hazard zone and sensor regions" width="1000">
-</p>
-
-The Recorded Demo exposes the same setup concept on a **fixed digital-twin viewpoint**. Camera orbit, pan, and zoom are locked while the machine itself remains animated: the rotor spins with replay RPM, the Hall LED pulses, and fault-specific motion is shown for unbalance, misalignment, and fastener looseness.
+The preview overlays person, hand, and generic motion boxes with zone state and confidence/evidence values. Vision detections are supervisory inspection signals and are not safety-rated protective functions.
 
 ## Condition diagnosis
 
@@ -130,20 +94,9 @@ The repository includes the physical recordings, training code, model artifact, 
   <img src="docs/images/confusion_matrix.png" alt="NEXis leave-one-file-out confusion matrix" width="610">
 </p>
 
-The evaluation uses **leave-one-file-out (LOFO)** validation so windows from the held-out recording never enter the training set for that fold. These metrics describe the supplied physical test rig and dataset; they are not a claim of universal transfer to arbitrary unseen machines.
+The evaluation uses **leave-one-file-out (LOFO)** validation so windows from the held-out recording never enter the training set for that fold. These metrics are scoped to the supplied rig, acquisition procedure, and dataset.
 
-## Physical evidence
-
-The repository includes the real sensor layout and representative fault setups used for the rotating-machine recordings.
-
-<p align="center">
-  <img src="docs/images/sensor_layout.png" alt="NEXis sensor layout on the physical rotating-machine rig" width="48%">
-  <img src="docs/images/fault_setup_examples.png" alt="Representative NEXis physical fault setups" width="48%">
-</p>
-
-The images above document the physical test configuration; the measured model results remain scoped to this rig and acquisition procedure.
-
-## System architecture
+## Architecture
 
 ```mermaid
 flowchart TB
@@ -175,18 +128,13 @@ flowchart TB
     VISION -->|Status + preview| API
 ```
 
-See [Architecture](docs/ARCHITECTURE.md) for the implementation map and [Evidence](docs/EVIDENCE.md) for claim boundaries.
+See [Architecture](docs/ARCHITECTURE.md), [Evidence](docs/EVIDENCE.md), and [Validation](docs/VALIDATION.md) for implementation and claim boundaries.
 
 ## Recorded Demo
 
-The demo workspace is intentionally isolated from physical motor control. Selecting a condition starts continuous playback:
+The Recorded Demo is isolated from physical motor-control endpoints. Selecting a condition starts continuous playback of matching physical CSV recordings until **Stop** is pressed. The browser uses the same diagnosis and visualization pipeline while the digital twin follows replay RPM and condition state.
 
-1. one matching physical CSV is selected;
-2. its samples replay through the same presentation and diagnosis path;
-3. when it finishes, another matching file is selected;
-4. playback continues until **Stop** is pressed.
-
-The digital twin follows replay RPM and condition state. This allows Normal, Unbalance, Misalignment, and Fastener Looseness to be demonstrated repeatedly without commanding the real motor.
+The Vision Safety Demo uses a fixed digital-twin viewpoint so hazard and sensor regions stay spatially stable while the machine remains animated from replay data.
 
 ## Repository layout
 
@@ -210,7 +158,6 @@ scripts/
   validate_evidence.py       Dataset/evaluation consistency validation
 docs/
   ARCHITECTURE.md
-  DEMO_GUIDE.md
   EVIDENCE.md
   TECHNICAL_QA.md
   VALIDATION.md
@@ -250,23 +197,17 @@ The Compose stack starts FastAPI, PostgreSQL, Mosquitto, and Nginx.
 
 ## ESP32 setup
 
-Copy:
-
-```text
-firmware/NEXis_ESP32_Physical/secrets.example.h
-```
-
-to `secrets.h`, then configure the Wi-Fi setup AP password, MQTT credentials, broker address, and CA certificate. `secrets.h` is excluded from Git.
+Copy `firmware/NEXis_ESP32_Physical/secrets.example.h` to `secrets.h`, then configure Wi-Fi, MQTT credentials, broker address, and the CA certificate. `secrets.h` is excluded from Git.
 
 ## Windows vision connector
 
-Open `edge_vision/README.md`, create `server_url.txt` from `server_url.example.txt`, and run:
+1. Copy `edge_vision/server_url.example.txt` to `edge_vision/server_url.txt`.
+2. Set the NEXis server URL.
+3. Run `edge_vision/START_NEXIS_VISION.vbs`.
+4. Open **Physical Station -> Vision Safety**.
+5. Select the intended camera. Use **Refresh Cameras** only after camera hardware changes.
 
-```text
-START_NEXIS_VISION.vbs
-```
-
-The launcher creates/reuses a local Python environment, connects to the Physical Station workspace, retrieves the edge token, starts the camera service, and opens Vision Safety in the browser. Camera selection and camera-off controls are available from the web UI.
+The launcher reuses the local Vision environment when available. Runtime state, logs, and sensor baselines are stored under `%LOCALAPPDATA%\NEXis\VisionEdge` rather than in the repository.
 
 ## Validation
 
@@ -278,12 +219,12 @@ node --check app/web/assets/app.js
 node --check app/web/assets/digital_twin.js
 ```
 
-CI runs the repository, evidence, Python, JavaScript, and shell checks on every push and pull request.
+CI runs repository, evidence, Python, JavaScript, and shell checks on pushes and pull requests.
 
 ## Safety and deployment boundary
 
 NEXis is an engineering prototype and **not a safety-rated PLC, emergency-stop system, interlock, machine guard, or certified quality station**. Physical safety mechanisms must remain independent of browser, camera, MQTT, cloud, and ESP32 software.
 
-The browser UI intentionally uses direct workspace selection instead of a user-login form. For Internet-facing deployments, place NEXis behind an appropriate access-control layer or restrict network access to trusted users.
+The browser UI uses direct workspace selection instead of a user-login form. Internet-facing deployments should place NEXis behind an appropriate access-control layer or restrict network access to trusted users.
 
 See [SECURITY.md](SECURITY.md) for deployment notes.

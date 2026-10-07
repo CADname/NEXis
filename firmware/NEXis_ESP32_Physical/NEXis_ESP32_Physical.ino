@@ -959,7 +959,7 @@ void publishControlStatus(const char* reason) {
   payload += ",\"pwm_eq\":" + String(pwmNowEq, 2);
   payload += ",\"control_mode\":\"" + String(modeName(controlMode)) + "\"";
   payload += ",\"mqtt_connected\":true,\"wifi_rssi\":" + String(WiFi.RSSI());
-  payload += ",\"reason\":\"" + String(reason) + "\",\"firmware\":\"NEXis-AWS-Physical-v1.4.0\"}";
+  payload += ",\"reason\":\"" + String(reason) + "\",\"firmware\":\"NEXis-AWS-Physical\"}";
   String topic = mqttTopic("/control/status"); mqttClient.publish(topic.c_str(), payload.c_str(), false);
 }
 
@@ -968,7 +968,7 @@ void publishCloudHealth() {
   String payload; payload.reserve(320);
   payload += "{\"asset_id\":\"rotor_rig_01\",\"site_id\":\"nexis_lab\",\"state\":\"ONLINE\",\"hostname\":\"esp32\",\"mqtt_connected\":true";
   payload += ",\"wifi_rssi\":" + String(WiFi.RSSI()) + ",\"uptime_ms\":" + String(millis());
-  payload += ",\"firmware\":\"NEXis-AWS-Physical-v1.4.0\"}";
+  payload += ",\"firmware\":\"NEXis-AWS-Physical\"}";
   String topic = mqttTopic("/health"); mqttClient.publish(topic.c_str(), payload.c_str(), false);
 }
 
@@ -2531,7 +2531,7 @@ void printCsvRow(bool withLabel) {
 void handleDataOutput() {
   handleMeasurementArmed();
 
-  // v1.4: physical telemetry is independent from target RPM and motor state.
+  // Physical telemetry is independent from target RPM and motor state.
   // The dashboard can start monitoring immediately at RPM=0. AI gating is done server-side.
   const bool measurementActive = (dataMode == DATA_MEASURING);
   const bool realtimeActive = (dataMode == DATA_REALTIME_STREAM);

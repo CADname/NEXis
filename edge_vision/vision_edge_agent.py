@@ -17,6 +17,13 @@ import numpy as np
 import requests
 
 try:
+    from cv2_enumerate_cameras import enumerate_cameras as enumerate_cv_cameras  # type: ignore
+    CAMERA_ENUM_IMPORT_ERROR = ""
+except Exception as exc:
+    enumerate_cv_cameras = None
+    CAMERA_ENUM_IMPORT_ERROR = repr(exc)
+
+try:
     cv2.setLogLevel(0)
 except Exception:
     pass
@@ -36,12 +43,27 @@ except Exception as exc:  # agent can still run camera/ROI checks without YOLO
     ULTRALYTICS_IMPORT_ERROR = repr(exc)
 
 APP_DIR = Path(__file__).resolve().parent
+LEGACY_STATE_DIR = APP_DIR / "vision_edge_state"
 if os.name == "nt" and os.getenv("LOCALAPPDATA"):
     STATE_DIR = Path(os.environ["LOCALAPPDATA"]) / "NEXis" / "VisionEdge"
 else:
-    STATE_DIR = APP_DIR / "runtime"
+    STATE_DIR = LEGACY_STATE_DIR
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 STATE_PATH = STATE_DIR / "state.json"
+
+def migrate_legacy_state() -> None:
+    if STATE_DIR == LEGACY_STATE_DIR or not LEGACY_STATE_DIR.exists():
+        return
+    for name in ["state.json", *(f"baseline_{k}.jpg" for k in ("adxl345", "acs712", "hall_sensor"))]:
+        src = LEGACY_STATE_DIR / name
+        dst = STATE_DIR / name
+        if src.exists() and not dst.exists():
+            try:
+                dst.write_bytes(src.read_bytes())
+            except Exception as exc:
+                print(f"[STATE] legacy migration skipped for {name}: {exc}")
+
+migrate_legacy_state()
 SENSOR_KEYS = ("adxl345", "acs712", "hall_sensor")
 ROI_LABELS = {
     "hall_led": "HALL LED",
@@ -63,6 +85,7 @@ COLORS = {
     "hall_sensor": (220, 120, 255),
 }
 
+# Vision analysis parameters.
 LED_WARMUP_FRAMES = 20
 LED_HISTORY_SECONDS = 4.0
 LED_GREEN_H_MIN = 35
@@ -106,7 +129,20 @@ ROTOR_NOISE_OFF_GAIN = 2.10
 SENSOR_MOUNT_DIFF_THRESHOLD = 55.0
 SENSOR_MOUNT_WARNING_FRAMES = 24
 SENSOR_MOUNT_WINDOW = 36
-VISION_PROTOCOL = 3
+
+# Generic object / unknown-motion intrusion detection.
+MOTION_BG_HISTORY = 240
+MOTION_BG_VAR_THRESHOLD = 28.0
+MOTION_WARMUP_FRAMES = 45
+MOTION_MIN_AREA_PX = 260.0
+MOTION_MIN_AREA_FRAC = 0.00030
+MOTION_MAX_AREA_FRAC = 0.45
+MOTION_CONFIRM_WINDOW = 5
+MOTION_CONFIRM_MIN_HITS = 2
+MOTION_EXCLUDE_PADDING_PX = 8
+MOTION_ZONE_OVERLAP = 0.08
+
+EDGE_PROTOCOL_VERSION = 3
 LOCAL_PREVIEW_HOST = "127.0.0.1"
 LOCAL_PREVIEW_PORT = 8765
 LOCAL_PREVIEW_JPEG_QUALITY = 82
@@ -160,13 +196,147 @@ def clear_baselines() -> None:
             print(f"[BASELINE] could not delete {baseline_path(key)}: {exc}")
 
 
+PHONE_CAMERA_NAME_TOKENS = (
+    "phone",
+    "android",
+    "mobile",
+    "iphone",
+    "continuity camera",
+    "link to windows",
+    "windows virtual camera",
+    "virtual camera",
+    "cross device",
+    "mobile device",
+    "galaxy",
+    "pixel",
+    "oneplus",
+    "xiaomi",
+    "redmi",
+    "poco",
+    "oppo",
+    "vivo",
+    "huawei",
+    "honor",
+    "motorola",
+    "realme",
+    "xperia",
+)
+CAMERA_DEVICE_CACHE_LOCK = threading.Lock()
+CAMERA_DEVICE_CACHE_TS = 0.0
+CAMERA_DEVICE_CACHE: list[dict[str, Any]] = []
+
+
+def _looks_like_phone_camera(name: str) -> bool:
+    text = " ".join(str(name or "").casefold().split())
+    if any(token in text for token in PHONE_CAMERA_NAME_TOKENS):
+        return True
+    # Samsung/other Android model identifiers can be exposed without a friendly phone name.
+    compact = text.replace("_", "-")
+    if compact.startswith("sm-") and len(compact) >= 6:
+        return True
+    return False
+
+
+def _enumerated_windows_cameras(force: bool = False) -> list[dict[str, Any]]:
+    """Enumerate Windows cameras without opening their video streams.
+
+    DirectShow is preferred because its indices are stable for ordinary USB/integrated
+    webcams. If it has no usable local camera, Media Foundation is tried as a fallback.
+    Phone/mobile camera names are marked blocked before any stream is opened.
+    """
+    global CAMERA_DEVICE_CACHE_TS, CAMERA_DEVICE_CACHE
+    if os.name != "nt" or enumerate_cv_cameras is None:
+        return []
+    now = time.monotonic()
+    with CAMERA_DEVICE_CACHE_LOCK:
+        if not force and CAMERA_DEVICE_CACHE and now - CAMERA_DEVICE_CACHE_TS < 2.0:
+            return [dict(x) for x in CAMERA_DEVICE_CACHE]
+
+    def collect(backend: int) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        try:
+            for item in enumerate_cv_cameras(backend):
+                idx = int(getattr(item, "index", -1))
+                name = str(getattr(item, "name", "") or f"Camera {idx}")
+                if idx < 0:
+                    continue
+                items.append({
+                    "index": idx,
+                    "label": f"Camera {idx}",
+                    "device_name": name,
+                    "backend": int(getattr(item, "backend", backend)),
+                    "blocked": _looks_like_phone_camera(name),
+                })
+        except Exception as exc:
+            print(f"[CAMERA] device enumeration failed for backend {backend}: {exc}")
+        by_index = {int(x["index"]): x for x in items}
+        return [by_index[k] for k in sorted(by_index)]
+
+    devices: list[dict[str, Any]] = []
+    if hasattr(cv2, "CAP_DSHOW"):
+        dshow = collect(cv2.CAP_DSHOW)
+        if any(not bool(x.get("blocked")) for x in dshow):
+            devices = dshow
+    if not any(not bool(x.get("blocked")) for x in devices) and hasattr(cv2, "CAP_MSMF"):
+        msmf = collect(cv2.CAP_MSMF)
+        if msmf:
+            devices = msmf
+
+    with CAMERA_DEVICE_CACHE_LOCK:
+        CAMERA_DEVICE_CACHE = [dict(x) for x in devices]
+        CAMERA_DEVICE_CACHE_TS = now
+    return devices
+
+
+def _allowed_windows_camera_map(force: bool = False) -> dict[int, dict[str, Any]]:
+    return {
+        int(x["index"]): dict(x)
+        for x in _enumerated_windows_cameras(force=force)
+        if not bool(x.get("blocked"))
+    }
+
+
+def _camera_index_is_blocked(index: int) -> bool:
+    devices = _enumerated_windows_cameras()
+    if not devices:
+        return False
+    for item in devices:
+        if int(item.get("index", -1)) == int(index):
+            return bool(item.get("blocked"))
+    return False
+
+
+def _camera_index_is_selectable(index: int) -> bool:
+    devices = _enumerated_windows_cameras()
+    if os.name == "nt" and not devices:
+        return False
+    if not devices:
+        return not _camera_index_is_blocked(index)
+    return any(
+        int(item.get("index", -1)) == int(index) and not bool(item.get("blocked"))
+        for item in devices
+    )
+
+
 def camera_candidates(value: str) -> list[int]:
     if str(value).lower() == "auto":
-        return [0, 1, 2, 3, 4, 5]
+        devices = _enumerated_windows_cameras()
+        if devices:
+            return sorted(
+                int(item["index"]) for item in devices if not bool(item.get("blocked"))
+            )
+        # Do not probe anonymous Windows camera indices. Friendly-name enumeration
+        # is required so linked/mobile and virtual cameras can be filtered before opening.
+        print("[CAMERA] friendly-name enumeration unavailable; camera probing is disabled")
+        return []
     try:
-        return [int(value)]
+        idx = int(value)
     except Exception:
-        return [0, 1, 2, 3, 4, 5]
+        return camera_candidates("auto")
+    if not _camera_index_is_selectable(idx):
+        print(f"[CAMERA] Camera {idx} ignored because it is blocked or not a local selectable camera")
+        return []
+    return [idx]
 
 
 def _warm_camera(cap, timeout_s: float = 1.4):
@@ -186,23 +356,34 @@ def _warm_camera(cap, timeout_s: float = 1.4):
 
 
 def open_camera(value: str, width: int, height: int, fps: int):
-    """Open a Windows camera robustly without racing the background scanner.
+    """Open a selected Windows camera without touching blocked phone cameras.
 
-    Integrated laptop cameras often need MSMF + warm-up and may reject MJPG or an
-    immediate first read. Logitech/USB cameras often work best with DirectShow + MJPG.
-    We therefore try both backends and then a conservative default-profile fallback.
+    On Windows, named camera enumeration is used first. When it is available we keep
+    capture on DirectShow so the friendly-name index and the OpenCV index stay aligned.
+    This prevents Camera 0/1/2 discovery from repeatedly waking a linked phone camera.
     """
     with CAMERA_OPEN_LOCK:
-        if os.name == "nt":
-            backends = []
+        enumerated = _enumerated_windows_cameras() if os.name == "nt" else []
+        fallback_backends: list[int] = []
+        if os.name == "nt" and not enumerated:
+            if hasattr(cv2, "CAP_DSHOW"):
+                fallback_backends.append(cv2.CAP_DSHOW)
             if hasattr(cv2, "CAP_MSMF"):
-                backends.append(cv2.CAP_MSMF)
-            backends.append(cv2.CAP_DSHOW)
-            backends.append(cv2.CAP_ANY)
-        else:
-            backends = [cv2.CAP_ANY]
+                fallback_backends.append(cv2.CAP_MSMF)
+            fallback_backends.append(cv2.CAP_ANY)
+        elif os.name != "nt":
+            fallback_backends = [cv2.CAP_ANY]
         seen: set[tuple[int, int, str]] = set()
         for idx in camera_candidates(value):
+            if _camera_index_is_blocked(idx):
+                continue
+            if enumerated:
+                device = next((x for x in enumerated if int(x.get("index", -1)) == int(idx) and not bool(x.get("blocked"))), None)
+                if device is None:
+                    continue
+                backends = [int(device.get("backend", cv2.CAP_DSHOW))]
+            else:
+                backends = list(fallback_backends)
             for backend in backends:
                 for profile in ("requested", "default"):
                     marker = (idx, int(backend), profile)
@@ -218,8 +399,6 @@ def open_camera(value: str, width: int, height: int, fps: int):
                     except Exception:
                         pass
                     if profile == "requested":
-                        # DirectShow USB webcams commonly benefit from MJPG. Do not force
-                        # it on MSMF integrated cameras because some laptop drivers reject it.
                         if os.name == "nt" and backend == cv2.CAP_DSHOW:
                             try:
                                 cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
@@ -239,11 +418,31 @@ def open_camera(value: str, width: int, height: int, fps: int):
 
 
 def discover_cameras(width: int, height: int, fps: int, max_index: int = 5) -> list[dict[str, Any]]:
-    """Probe local camera indices before the live camera is opened.
+    """Return selectable cameras without opening every Windows camera.
 
-    The web UI intentionally displays stable index labels instead of guessing Windows
-    friendly-name ordering, which is not reliably mapped to OpenCV indices.
+    On Windows this uses DirectShow device enumeration, which makes Camera buttons
+    available even when no camera is currently active and filters linked phone cameras
+    before anything is opened. Other platforms retain the legacy probe fallback.
     """
+    if os.name == "nt":
+        devices = _enumerated_windows_cameras(force=True)
+        if not devices:
+            print("[CAMERA] no friendly-name camera enumeration result; no Windows cameras will be probed")
+            return []
+        result = []
+        for item in devices:
+            if bool(item.get("blocked")):
+                print(f"[CAMERA] blocked linked/mobile camera: {item.get('device_name', 'unknown')}")
+                continue
+            idx = int(item["index"])
+            if idx <= int(max_index):
+                result.append({
+                    "index": idx,
+                    "label": f"Camera {idx}",
+                    "device_name": str(item.get("device_name", "")),
+                })
+        return result
+
     found: list[dict[str, Any]] = []
     for idx in range(max(0, int(max_index)) + 1):
         cap, actual, first = open_camera(str(idx), width, height, fps)
@@ -254,7 +453,6 @@ def discover_cameras(width: int, height: int, fps: int, max_index: int = 5) -> l
             cap.release()
         except Exception:
             pass
-    # Deduplicate while preserving numeric order.
     by_index = {int(item["index"]): item for item in found}
     return [by_index[k] for k in sorted(by_index)]
 
@@ -383,6 +581,65 @@ def strongest_zone(a: str, b: str) -> str:
     return a if rank.get(a, -1) >= rank.get(b, -1) else b
 
 
+def _expanded_box(box: list[int] | tuple[int, int, int, int], shape, pad: int = 0) -> tuple[int, int, int, int]:
+    h, w = shape[:2]
+    x1, y1, x2, y2 = [int(v) for v in box]
+    return max(0, x1-pad), max(0, y1-pad), min(w, x2+pad), min(h, y2+pad)
+
+
+def skin_ratio_in_box(frame: np.ndarray, box: list[int] | tuple[int, int, int, int]) -> tuple[float, int]:
+    """Return a conservative skin-like pixel ratio for a motion box.
+
+    This is only a fallback when MediaPipe is unavailable or misses a moving hand.
+    It never replaces YOLO person detection and it does not create alerts/events.
+    """
+    x1, y1, x2, y2 = _expanded_box(box, frame.shape, 0)
+    if x2 <= x1 or y2 <= y1:
+        return 0.0, 0
+    roi = frame[y1:y2, x1:x2]
+    if roi is None or roi.size == 0:
+        return 0.0, 0
+    try:
+        ycrcb = cv2.cvtColor(roi, cv2.COLOR_BGR2YCrCb)
+        y, cr, cb = cv2.split(ycrcb)
+        # Wide, illumination-tolerant skin range; motion gating keeps this from being
+        # used as a generic static color detector.
+        mask = ((cr >= 130) & (cr <= 180) & (cb >= 70) & (cb <= 140) & (y >= 35))
+        pixels = int(np.count_nonzero(mask))
+        ratio = float(pixels) / float(max(1, mask.size))
+        return ratio, pixels
+    except Exception:
+        return 0.0, 0
+
+
+def skin_motion_hand_fallback(frame: np.ndarray, motion_items: list[dict[str, Any]]):
+    """Promote only skin-like moving intrusions to hand detections.
+
+    Returns (hands, remaining_motion). This keeps non-skin tools/objects in the
+    Object / Motion channel instead of mislabeling every moving blob as a hand.
+    """
+    hands: list[dict[str, Any]] = []
+    remaining: list[dict[str, Any]] = []
+    for item in motion_items:
+        box = item.get("xyxy") if isinstance(item, dict) else None
+        if not isinstance(box, (list, tuple)) or len(box) != 4:
+            remaining.append(item); continue
+        ratio, pixels = skin_ratio_in_box(frame, box)
+        area = max(1, (int(box[2])-int(box[0])) * (int(box[3])-int(box[1])))
+        # Conservative fallback: enough absolute skin pixels and enough of the moving box.
+        if pixels >= max(120, int(area * 0.035)) and ratio >= 0.055:
+            confidence = min(0.98, max(0.35, 0.30 + ratio * 2.6))
+            hands.append({
+                "xyxy": [int(v) for v in box],
+                "zone": str(item.get("zone", "safe")),
+                "label": "HAND",
+                "confidence": round(float(confidence), 3),
+                "skin_ratio": round(float(ratio), 4),
+                "detection_mode": "skin_motion_fallback",
+            })
+        else:
+            remaining.append(item)
+    return hands, remaining
 
 
 class LocalPreviewServer:
@@ -674,7 +931,9 @@ class CameraCaptureWorker:
                             self.frame = None
                             self.switch_error = ""
                         self.stop_event.wait(0.02)
-                        continue                    # Re-selecting the active camera is a no-op to avoid reopening a device handle.
+                        continue
+                    # Clicking the camera that is already active is a no-op.
+                    # tried to open the same Windows device a second time while the old
                     # handle still owned it, which could make Camera 0 appear broken.
                     try:
                         requested_idx = int(req) if str(req).lower() != "auto" else None
@@ -724,14 +983,14 @@ class CameraCaptureWorker:
                                     self.camera_ok = True
                                     self.frame = prev_first.copy()
                                     self.frame_seq += 1
-                                    self.switch_error = f"Camera {req} failed; previous camera restored"
+                                    self.switch_error = f"Camera {req} connection failed · previous camera restored"
                                 self.preview.update(prev_first, self.frame_seq)
                         if not restored:
                             with self.lock:
                                 self.camera_ok = False
                                 self.camera_index = None
                                 self.frame = None
-                                self.switch_error = f"Camera {req} could not be opened" if req != "auto" else "No available camera could be opened"
+                                self.switch_error = f"Unable to open Camera {req}" if req != "auto" else "Unable to open any available camera"
                         next_retry = time.time() + 1.0
                 if cap is None:
                     if str(req).strip().lower() == "off":
@@ -756,7 +1015,7 @@ class CameraCaptureWorker:
                             self.camera_ok = False
                             self.frame = None
                             self.camera_index = None
-                            self.switch_error = "Camera stream lost; reconnecting"
+                            self.switch_error = "Camera stream lost · reconnecting"
                             self.request_generation += 1
                         failures = 0
                     self.stop_event.wait(0.01)
@@ -803,6 +1062,18 @@ class VisionAnalyzer:
         self.hand_has_run = False
         self.frame_index = 0
 
+        self.motion_detector_ok = True
+        self.motion_detector_error = ""
+        self.motion_frame_count = 0
+        self.motion_hit_history: deque[bool] = deque(maxlen=MOTION_CONFIRM_WINDOW)
+        self.last_motion_intrusions: list[dict[str, Any]] = []
+        self.last_motion_zone = "safe"
+        self.bg_subtractor = cv2.createBackgroundSubtractorMOG2(
+            history=MOTION_BG_HISTORY,
+            varThreshold=MOTION_BG_VAR_THRESHOLD,
+            detectShadows=False,
+        )
+
         self.led_frame_count = 0
         self.led_times: deque[float] = deque(maxlen=180)
         self.led_values: deque[float] = deque(maxlen=180)
@@ -840,6 +1111,17 @@ class VisionAnalyzer:
         self.last_hand_zone = "unknown" if self.hand_detector is None else "safe"
         self.last_hand_error = "MediaPipe unavailable" if self.hand_detector is None else ""
         self.hand_has_run = False
+        self.motion_detector_ok = True
+        self.motion_detector_error = ""
+        self.motion_frame_count = 0
+        self.motion_hit_history.clear()
+        self.last_motion_intrusions = []
+        self.last_motion_zone = "safe"
+        self.bg_subtractor = cv2.createBackgroundSubtractorMOG2(
+            history=MOTION_BG_HISTORY,
+            varThreshold=MOTION_BG_VAR_THRESHOLD,
+            detectShadows=False,
+        )
         self.led_frame_count = 0
         self.led_times.clear()
         self.led_values.clear()
@@ -971,6 +1253,130 @@ class VisionAnalyzer:
         if not self.hand_detector_ok:
             return self.last_hands, "unknown", False, self.last_hand_error or "MediaPipe hand detector unavailable"
         return self.last_hands, self.last_hand_zone, True, ""
+
+    def analyze_motion_intrusions(
+        self,
+        frame: np.ndarray,
+        danger: np.ndarray | None,
+        warning: np.ndarray | None,
+        rois: dict[str, Any],
+        ignore_boxes: list[dict[str, Any]],
+        zone_ready: bool,
+    ):
+        """Detect non-person/non-hand moving intrusions near the configured hazard zone.
+
+        Known Vision ROIs and already-detected person/hand boxes are masked out to
+        reduce duplicate detections.
+        """
+        try:
+            fg = self.bg_subtractor.apply(frame, learningRate=0.006)
+            self.motion_frame_count += 1
+            if fg is None or fg.size == 0:
+                raise RuntimeError("background subtractor returned no mask")
+
+            _, fg = cv2.threshold(fg, 200, 255, cv2.THRESH_BINARY)
+            fg = cv2.morphologyEx(fg, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+            fg = cv2.morphologyEx(fg, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+            fg = cv2.dilate(fg, np.ones((5, 5), np.uint8), iterations=1)
+
+            # Known machine/sensor ROIs already have dedicated detectors. Mask them from the
+            # generic motion channel so rotor motion or a blinking LED does not become an
+            # "object intrusion" by itself.
+            for key in ROI_LABELS:
+                rect = pixel_roi(rois.get(key) if isinstance(rois, dict) else None, frame.shape)
+                if not rect:
+                    continue
+                x, y, rw, rh = rect
+                pad = MOTION_EXCLUDE_PADDING_PX * (3 if key == "rotor" else 1)
+                x1, y1 = max(0, x-pad), max(0, y-pad)
+                x2, y2 = min(frame.shape[1], x+rw+pad), min(frame.shape[0], y+rh+pad)
+                fg[y1:y2, x1:x2] = 0
+
+            # Person/hand detections already have dedicated boxes. Remove those regions from
+            # the generic motion mask so the dashboard does not draw duplicate boxes.
+            for item in ignore_boxes:
+                box = item.get("xyxy") if isinstance(item, dict) else None
+                if not isinstance(box, (list, tuple)) or len(box) != 4:
+                    continue
+                x1, y1, x2, y2 = _expanded_box(box, frame.shape, 10)
+                if x2 > x1 and y2 > y1:
+                    fg[y1:y2, x1:x2] = 0
+
+            if not zone_ready or warning is None or danger is None:
+                self.last_motion_intrusions = []
+                self.last_motion_zone = "unconfigured"
+                self.motion_detector_ok = True
+                self.motion_detector_error = ""
+                return [], "unconfigured", True, "", max(0, MOTION_WARMUP_FRAMES-self.motion_frame_count)
+
+            # Only movement in the warning/danger envelope is relevant to intrusion safety.
+            fg = cv2.bitwise_and(fg, warning)
+            warmup_remaining = max(0, MOTION_WARMUP_FRAMES - self.motion_frame_count)
+            if warmup_remaining > 0:
+                self.motion_hit_history.append(False)
+                self.last_motion_intrusions = []
+                self.last_motion_zone = "safe"
+                self.motion_detector_ok = True
+                self.motion_detector_error = ""
+                return [], "safe", True, "", warmup_remaining
+
+            contours, _ = cv2.findContours(fg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            frame_area = float(max(1, frame.shape[0] * frame.shape[1]))
+            min_area = max(MOTION_MIN_AREA_PX, frame_area * MOTION_MIN_AREA_FRAC)
+            max_area = frame_area * MOTION_MAX_AREA_FRAC
+            items: list[dict[str, Any]] = []
+            for cnt in contours:
+                area = float(cv2.contourArea(cnt))
+                if area < min_area or area > max_area:
+                    continue
+                x, y, rw, rh = cv2.boundingRect(cnt)
+                if rw < 4 or rh < 4:
+                    continue
+                box = (x, y, x+rw, y+rh)
+                dr = overlap_ratio(danger, box)
+                wr = overlap_ratio(warning, box)
+                z = point_zone(danger, warning, x + rw//2, min(frame.shape[0]-1, y+rh-1))
+                if dr >= MOTION_ZONE_OVERLAP:
+                    z = "danger"
+                elif z != "danger" and wr >= MOTION_ZONE_OVERLAP:
+                    z = "warning"
+                if z not in ("warning", "danger"):
+                    continue
+                roi = fg[y:y+rh, x:x+rw]
+                motion_ratio = float(np.count_nonzero(roi)) / float(max(1, roi.size))
+                items.append({
+                    "xyxy": [int(x), int(y), int(x+rw), int(y+rh)],
+                    "zone": z,
+                    "area_px": round(area, 1),
+                    "motion_ratio": round(motion_ratio, 4),
+                    "danger_overlap": round(dr, 4),
+                    "warning_overlap": round(wr, 4),
+                    "kind": "object_motion",
+                })
+
+            items.sort(key=lambda x: float(x.get("area_px", 0.0)), reverse=True)
+            items = items[:8]
+            hit = bool(items)
+            self.motion_hit_history.append(hit)
+            confirmed = hit and sum(1 for x in self.motion_hit_history if x) >= MOTION_CONFIRM_MIN_HITS
+            if not confirmed:
+                items = []
+
+            zone = "safe"
+            for item in items:
+                zone = strongest_zone(zone, str(item.get("zone", "safe")))
+
+            self.last_motion_intrusions = [dict(x) for x in items]
+            self.last_motion_zone = zone
+            self.motion_detector_ok = True
+            self.motion_detector_error = ""
+            return items, zone, True, "", 0
+        except Exception as exc:
+            self.motion_detector_ok = False
+            self.motion_detector_error = str(exc)[:240]
+            self.last_motion_intrusions = []
+            self.last_motion_zone = "unknown"
+            return [], "unknown", False, self.motion_detector_error, 0
 
     def analyze_led(self, frame: np.ndarray, rect, ts: float):
         roi_bgr = crop(frame, rect)
@@ -1177,7 +1583,7 @@ class VisionAnalyzer:
             return {"status": "uncalibrated", "diff": 0.0, "votes": 0}
         if ref.shape[:2] != roi.shape[:2]:
             ref = cv2.resize(ref, (roi.shape[1], roi.shape[0]), interpolation=cv2.INTER_AREA)
-        # Keep the validated reference implementation's conservative mount metric:
+        # Keep the sensor-mount metric conservative:
         # direct grayscale mean absolute difference + multi-frame voting.
         g1 = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         g2 = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY)
@@ -1288,7 +1694,8 @@ def main() -> int:
         preview = LocalPreviewServer(port=int(args.preview_port))
     except Exception as exc:
         bridge.close(); print(f"[ERROR] Local preview server failed: {exc}"); return 3
-    bridge.publish_status({"source_time":time.strftime("%Y-%m-%dT%H:%M:%S"),"vision_protocol":VISION_PROTOCOL,"camera_ok":False,"camera_index":None,"available_cameras":[],"fps":0.0,"frame_seq":0,"local_preview":True,"local_preview_port":int(args.preview_port),"local_preview_ready":False,"person_detector_ok":False,"person_zone":"unknown","person_count":0,"people":[],"hand_detector_ok":False,"hand_zone":"unknown","hand_count":0,"hands":[]})
+    initial_cameras = discover_cameras(args.width,args.height,args.fps,9)
+    bridge.publish_status({"source_time":time.strftime("%Y-%m-%dT%H:%M:%S"),"vision_protocol":EDGE_PROTOCOL_VERSION,"camera_ok":False,"camera_index":None,"available_cameras":initial_cameras,"fps":0.0,"frame_seq":0,"local_preview":True,"local_preview_port":int(args.preview_port),"local_preview_ready":False,"person_detector_ok":False,"person_zone":"unknown","person_count":0,"people":[],"hand_detector_ok":False,"hand_detection_mode":"unavailable","hand_zone":"unknown","hand_count":0,"hands":[],"motion_detector_ok":True,"motion_detector_error":"","motion_warmup_remaining":MOTION_WARMUP_FRAMES,"object_intrusion_count":0,"object_intrusion_zone":"unknown","unknown_motion_zone":"unknown","motion_intrusions":[],"safety_zone":"unknown"})
 
     model = None
     if UltralyticsYOLO is not None:
@@ -1299,10 +1706,16 @@ def main() -> int:
     hand_detector = None
     if mp is not None:
         try:
-            hand_detector = mp.solutions.hands.Hands(static_image_mode=False,max_num_hands=2,model_complexity=0,min_detection_confidence=0.45,min_tracking_confidence=0.45)
+            solutions = getattr(mp, "solutions", None)
+            hands_api = getattr(solutions, "hands", None) if solutions is not None else None
+            if hands_api is None:
+                raise RuntimeError("installed MediaPipe build has no legacy solutions.hands API")
+            hand_detector = hands_api.Hands(static_image_mode=False,max_num_hands=2,model_complexity=0,min_detection_confidence=0.45,min_tracking_confidence=0.45)
             print("[MEDIAPIPE] hand detector ready")
-        except Exception as exc: print(f"[MEDIAPIPE] unavailable: {exc}")
-    else: print(f"[MEDIAPIPE] unavailable: {MEDIAPIPE_IMPORT_ERROR}")
+        except Exception as exc:
+            print(f"[MEDIAPIPE] unavailable: {exc}; skin-motion fallback remains active")
+    else:
+        print(f"[MEDIAPIPE] unavailable: {MEDIAPIPE_IMPORT_ERROR}; skin-motion fallback remains active")
 
     analyzer = VisionAnalyzer(model, hand_detector)
     capture = CameraCaptureWorker(args.camera,args.width,args.height,args.fps,preview)
@@ -1310,38 +1723,31 @@ def main() -> int:
     last_config_generation=-1; last_status_send=0.0; last_frame_send=0.0; last_analyzed_seq=-1; last_camera_index=None; last_baseline_attempt=0.0
     zone_cache_key=None; poly=danger=warning=None
     desired_camera_index=None; camera_selection_revision=0; handled_camera_selection_revision=0
-    available_cameras: list[dict[str,Any]]=[]; camera_list_lock=threading.Lock(); scan_stop=threading.Event()
+    camera_refresh_revision=0; handled_camera_refresh_revision=0
+    available_cameras: list[dict[str,Any]]=[dict(x) for x in initial_cameras]; camera_list_lock=threading.Lock()
 
     def remember_camera(index:int):
+        if _camera_index_is_blocked(index):
+            return
         with camera_list_lock:
             if all(int(x.get("index",-1))!=int(index) for x in available_cameras):
                 available_cameras.append({"index":int(index),"label":f"Camera {int(index)}"}); available_cameras.sort(key=lambda x:int(x.get("index",999)))
     def camera_list_snapshot():
         with camera_list_lock: return [dict(x) for x in available_cameras]
-    def scan_loop():
-        while not scan_stop.is_set():
-            snap=capture.snapshot(); active=snap.get("camera_index")
-            if active is None:
-                scan_stop.wait(0.5); continue
-            with capture.lock:
-                switch_pending = capture.request_generation != capture.handled_generation
-            if switch_pending:
-                scan_stop.wait(0.35); continue
-            found={int(active)}
-            for idx in range(10):
-                if scan_stop.is_set(): return
-                if active is not None and idx==int(active): continue
-                c,actual,first=open_camera(str(idx),args.width,args.height,args.fps)
-                if c is not None and actual is not None and first is not None:
-                    found.add(int(actual))
-                    try:c.release()
-                    except Exception:pass
-            with camera_list_lock: available_cameras[:]=[{"index":i,"label":f"Camera {i}"} for i in sorted(found)]
-            scan_stop.wait(12.0)
-    scan_thread=threading.Thread(target=scan_loop,name="nexis-camera-scan",daemon=True); scan_thread.start()
+    def refresh_camera_list():
+        # Camera enumeration happens only at startup and on an explicit dashboard request.
+        # Friendly-name enumeration blocks linked/mobile cameras before any video stream opens.
+        found=discover_cameras(args.width,args.height,args.fps,9)
+        snap=capture.snapshot(); active=snap.get("camera_index")
+        if active is not None and not _camera_index_is_blocked(int(active)) and all(int(x.get("index",-1))!=int(active) for x in found):
+            found.append({"index":int(active),"label":f"Camera {int(active)}"})
+            found.sort(key=lambda x:int(x.get("index",999)))
+        with camera_list_lock:
+            available_cameras[:]=[dict(x) for x in found]
+        print(f"[CAMERA] camera list refreshed: {[x.get('label') for x in found]}")
 
     def apply_remote(remote:dict[str,Any]|None):
-        nonlocal configured,config,zone_cache_key,desired_camera_index,camera_selection_revision
+        nonlocal configured,config,zone_cache_key,desired_camera_index,camera_selection_revision,camera_refresh_revision
         if remote is None:return
         sel=remote.get("camera_selection",{}) if isinstance(remote,dict) else {}
         if isinstance(sel,dict):
@@ -1350,7 +1756,13 @@ def main() -> int:
             try:idx=None if sel.get("requested_index") is None else int(sel.get("requested_index"))
             except Exception:idx=None
             if idx is not None and not 0<=idx<=15: idx=None
+            if idx is not None and not _camera_index_is_selectable(idx):
+                print(f"[CAMERA] ignored blocked/unlisted Camera {idx}")
+                idx=None
             if rev>=camera_selection_revision: camera_selection_revision=rev; desired_camera_index=idx
+            try:refresh_rev=int(sel.get("refresh_revision",0) or 0)
+            except Exception:refresh_rev=0
+            if refresh_rev>=camera_refresh_revision: camera_refresh_revision=refresh_rev
         prev_conf=configured; prev_rev=int(config.get("revision",0) or 0) if configured else 0
         reset_rev=int(remote.get("reset_revision",0) or 0)
         if reset_rev>int(state.get("reset_revision",0) or 0):
@@ -1369,6 +1781,9 @@ def main() -> int:
                 handled_camera_selection_revision=camera_selection_revision
                 if desired_camera_index is None and camera_selection_revision>0: capture.request_camera_off()
                 elif desired_camera_index is not None: capture.request_camera(desired_camera_index)
+            if camera_refresh_revision>handled_camera_refresh_revision:
+                handled_camera_refresh_revision=camera_refresh_revision
+                refresh_camera_list()
 
             camera_user_off=bool(camera_selection_revision>0 and desired_camera_index is None)
             snap=capture.snapshot(); cam_ok=bool(snap["camera_ok"]); cam_index=snap["camera_index"]; frame=snap["frame"]; frame_seq=int(snap["frame_seq"]); fps_value=float(snap["fps"])
@@ -1384,7 +1799,7 @@ def main() -> int:
             if not cam_ok or frame is None:
                 if now-last_status_send>=0.5:
                     last_status_send=now
-                    bridge.publish_status({"source_time":time.strftime("%Y-%m-%dT%H:%M:%S",time.localtime(now)),"vision_protocol":VISION_PROTOCOL,"camera_ok":False,"camera_user_off":camera_user_off,"camera_index":cam_index,"available_cameras":camera_list_snapshot(),"camera_selection_revision":camera_selection_revision,"camera_requested_index":desired_camera_index,"camera_switch_error":snap.get("camera_switch_error","") ,"fps":fps_value,"frame_seq":frame_seq,"configured":bool(configured),"config_revision":int(config.get("revision",0) or 0) if configured else 0,"frame_config_compatible":None,"baseline_revision":int(state.get("baseline_revision",0) or 0),"baseline_requested_revision":baseline_revision,"baseline_ready":baseline_ready,"person_detector_ok":False,"person_detector_error":"Camera unavailable","person_count":0,"person_zone":"unknown","people":[],"hand_detector_ok":False,"hand_detector_error":"Camera unavailable","hand_count":0,"hand_zone":"unknown","hands":[],"local_preview":True,"local_preview_port":int(args.preview_port),"local_preview_ready":False,"hall_led":{"configured":False,"blink_detected":False,"blink_rate_hz":0.0,"evidence":0.0},"rotor":{"configured":False,"motion_detected":False,"motion_score":0.0,"active_ratio":0.0},"sensors":{k:{"status":"camera_offline","diff":0.0,"votes":0} for k in SENSOR_KEYS}})
+                    bridge.publish_status({"source_time":time.strftime("%Y-%m-%dT%H:%M:%S",time.localtime(now)),"vision_protocol":EDGE_PROTOCOL_VERSION,"camera_ok":False,"camera_user_off":camera_user_off,"camera_index":cam_index,"available_cameras":camera_list_snapshot(),"camera_selection_revision":camera_selection_revision,"camera_refresh_revision":camera_refresh_revision,"camera_requested_index":desired_camera_index,"camera_switch_error":snap.get("camera_switch_error","") ,"fps":fps_value,"frame_seq":frame_seq,"configured":bool(configured),"config_revision":int(config.get("revision",0) or 0) if configured else 0,"frame_config_compatible":None,"baseline_revision":int(state.get("baseline_revision",0) or 0),"baseline_requested_revision":baseline_revision,"baseline_ready":baseline_ready,"person_detector_ok":False,"person_detector_error":"Camera unavailable","person_count":0,"person_zone":"unknown","people":[],"hand_detector_ok":False,"hand_detector_error":"Camera unavailable","hand_detection_mode":"unavailable","hand_count":0,"hand_zone":"unknown","hands":[],"motion_detector_ok":True,"motion_detector_error":"","motion_warmup_remaining":MOTION_WARMUP_FRAMES,"object_intrusion_count":0,"object_intrusion_zone":"unknown","unknown_motion_zone":"unknown","motion_intrusions":[],"safety_zone":"unknown","local_preview":True,"local_preview_port":int(args.preview_port),"local_preview_ready":False,"hall_led":{"configured":False,"blink_detected":False,"blink_rate_hz":0.0,"evidence":0.0},"rotor":{"configured":False,"motion_detected":False,"motion_score":0.0,"active_ratio":0.0},"sensors":{k:{"status":"camera_offline","diff":0.0,"votes":0} for k in SENSOR_KEYS}})
                 time.sleep(0.02); continue
 
             frame_compatible=config_frame_compatible(config,frame.shape,cam_index) if configured else True
@@ -1410,10 +1825,30 @@ def main() -> int:
             ready=bool(configured and frame_compatible)
             people,person_zone,det_ok,det_err=analyzer.analyze_people(frame,danger,warning,max(1,int(args.yolo_every)),args.confidence,ready and poly is not None)
             hands,hand_zone,hand_ok,hand_err=analyzer.analyze_hands(frame,danger,warning,max(1,int(args.hand_every)),ready and poly is not None)
+            hand_mode="mediapipe" if hand_ok else "unavailable"
+            motion_items,motion_zone,motion_ok,motion_err,motion_warmup=analyzer.analyze_motion_intrusions(frame,danger,warning,rois,[*people,*hands],ready and poly is not None)
+            # If MediaPipe is unavailable or misses a moving hand, reuse the already-confirmed
+            # motion box only when that moving region is skin-like. This keeps the launcher
+            # functional on Python builds where MediaPipe wheels/APIs are unavailable.
+            if ready and motion_items and (not hand_ok or not hands):
+                fallback_hands,remaining_motion=skin_motion_hand_fallback(frame,motion_items)
+                if fallback_hands:
+                    if not hands:
+                        hands=fallback_hands
+                        hand_zone="safe"
+                        for item in hands: hand_zone=strongest_zone(hand_zone,str(item.get("zone","safe")))
+                    else:
+                        hands=[*hands,*fallback_hands]
+                        for item in fallback_hands: hand_zone=strongest_zone(hand_zone,str(item.get("zone","safe")))
+                    hand_ok=True; hand_err=""; hand_mode="skin_motion_fallback" if hand_detector is None else "mediapipe+skin_motion_fallback"
+                    motion_items=remaining_motion
+                    motion_zone="safe"
+                    for item in motion_items: motion_zone=strongest_zone(motion_zone,str(item.get("zone","safe")))
             led=analyzer.analyze_led(frame,pixel_roi(rois.get("hall_led"),frame.shape),now) if ready else {"configured":False,"blink_detected":False,"signal":0.0,"brightness_delta":0.0,"blink_rate_hz":0.0,"evidence":0.0}
             rotor=analyzer.analyze_rotor(frame,pixel_roi(rois.get("rotor"),frame.shape),now) if ready else {"configured":False,"motion_detected":False,"motion_score":0.0,"active_ratio":0.0}
             sensors={k:analyzer.analyze_sensor_mount(frame,pixel_roi(rois.get(k),frame.shape),k,baseline_ready) for k in SENSOR_KEYS} if ready else ({k:{"status":"frame_mismatch","diff":0.0,"votes":0} for k in SENSOR_KEYS} if configured else {k:{"status":"not_configured","diff":0.0,"votes":0} for k in SENSOR_KEYS})
-            payload={"source_time":time.strftime("%Y-%m-%dT%H:%M:%S",time.localtime(now)),"vision_protocol":VISION_PROTOCOL,"camera_ok":True,"camera_user_off":False,"camera_index":cam_index,"available_cameras":camera_list_snapshot(),"camera_selection_revision":camera_selection_revision,"camera_requested_index":desired_camera_index,"camera_switch_error":snap.get("camera_switch_error","") ,"fps":fps_value,"frame_seq":frame_seq,"frame_width":int(frame.shape[1]),"frame_height":int(frame.shape[0]),"configured":bool(configured),"config_revision":int(config.get("revision",0) or 0) if configured else 0,"frame_config_compatible":bool(frame_compatible),"baseline_revision":int(state.get("baseline_revision",0) or 0),"baseline_requested_revision":baseline_revision,"baseline_ready":baseline_ready,"person_detector_ok":bool(det_ok),"person_detector_error":det_err,"person_count":len(people),"person_zone":person_zone,"people":people,"hand_detector_ok":bool(hand_ok),"hand_detector_error":hand_err,"hand_count":len(hands),"hand_zone":hand_zone,"hands":hands,"safety_zone":strongest_zone(person_zone,hand_zone) if ready else "unconfigured","local_preview":True,"local_preview_port":int(args.preview_port),"local_preview_ready":True,"hall_led":led,"rotor":rotor,"sensors":sensors}
+            safety_zone=strongest_zone(strongest_zone(person_zone,hand_zone),motion_zone) if ready else "unconfigured"
+            payload={"source_time":time.strftime("%Y-%m-%dT%H:%M:%S",time.localtime(now)),"vision_protocol":EDGE_PROTOCOL_VERSION,"camera_ok":True,"camera_user_off":False,"camera_index":cam_index,"available_cameras":camera_list_snapshot(),"camera_selection_revision":camera_selection_revision,"camera_refresh_revision":camera_refresh_revision,"camera_requested_index":desired_camera_index,"camera_switch_error":snap.get("camera_switch_error","") ,"fps":fps_value,"frame_seq":frame_seq,"frame_width":int(frame.shape[1]),"frame_height":int(frame.shape[0]),"configured":bool(configured),"config_revision":int(config.get("revision",0) or 0) if configured else 0,"frame_config_compatible":bool(frame_compatible),"baseline_revision":int(state.get("baseline_revision",0) or 0),"baseline_requested_revision":baseline_revision,"baseline_ready":baseline_ready,"person_detector_ok":bool(det_ok),"person_detector_error":det_err,"person_count":len(people),"person_zone":person_zone,"people":people,"hand_detector_ok":bool(hand_ok),"hand_detector_error":hand_err,"hand_detection_mode":hand_mode,"hand_count":len(hands),"hand_zone":hand_zone,"hands":hands,"motion_detector_ok":bool(motion_ok),"motion_detector_error":motion_err,"motion_warmup_remaining":int(motion_warmup),"object_intrusion_count":len(motion_items),"object_intrusion_zone":motion_zone,"unknown_motion_zone":motion_zone,"motion_intrusions":motion_items,"safety_zone":safety_zone,"local_preview":True,"local_preview_port":int(args.preview_port),"local_preview_ready":True,"hall_led":led,"rotor":rotor,"sensors":sensors}
             if now-last_status_send>=0.25: last_status_send=now; bridge.publish_status(payload)
             # Web preview only: upload a JPEG at low rate in the separate network worker.
             # All AI/LED/rotor/sensor decisions above use the local raw frame directly,
@@ -1427,9 +1862,7 @@ def main() -> int:
                 if key in (27,ord('q'),ord('Q')): break
     except KeyboardInterrupt: pass
     finally:
-        scan_stop.set(); capture.close()
-        try: scan_thread.join(timeout=1.0)
-        except Exception: pass
+        capture.close()
         bridge.close(); preview.close()
         try:
             if hand_detector is not None: hand_detector.close()

@@ -2,7 +2,7 @@
 
 ## What problem does NEXis solve?
 
-NEXis provides a repeatable end-of-line spin-inspection workflow for rotating assemblies after assembly and before product release. It combines setup verification, synchronized sensor data, controlled machine state, AI diagnosis, and inspection evidence in one interface so a normal result can become a pass candidate and a detected fault can be corrected and retested.
+NEXis provides a repeatable end-of-line spin-inspection workflow for rotating assemblies after assembly and before product release. It combines setup verification, synchronized sensor data, controlled machine state, AI diagnosis, and inspection evidence in one interface.
 
 ## Which signals are used for condition diagnosis?
 
@@ -16,17 +16,25 @@ Normal, Unbalance, Misalignment, and Fastener Looseness.
 
 The supplied evaluation uses leave-one-file-out validation over 225 physical recordings. Each held-out recording remains isolated from training for its fold.
 
-## Does 96.44% mean the model works on every machine?
+## Does the recorded accuracy imply universal transfer?
 
-No. It is the measured file-level accuracy on the supplied rig and dataset under the documented acquisition procedure. Deployment on another machine requires validation and, where needed, retraining or recalibration.
+No. The metrics apply to the supplied rig and dataset under the documented acquisition procedure. Deployment on another machine requires validation and, where needed, retraining or recalibration.
 
 ## What does the vision system detect?
 
-The Windows edge performs YOLO person detection, MediaPipe hand tracking, hazard-zone intersection checks, Hall LED blink detection, rotor motion detection, and sensor-mount baseline comparison.
+The Windows edge performs person detection, hand detection, generic moving-object intrusion detection, hazard-zone evaluation, Hall LED blink detection, rotor motion detection, and sensor-mount baseline comparison.
+
+## Are person, hand, and object boxes visible in the dashboard?
+
+Yes. The edge sends box coordinates and zone/evidence values. The browser draws synchronized overlays on the preview for person, hand, and generic motion intrusions.
+
+## How are cameras discovered?
+
+Windows camera friendly names are enumerated without opening every stream. Linked/mobile and virtual camera names are filtered before opening. The list is scanned at startup and again only when the operator presses **Refresh Cameras**.
 
 ## Is the web preview used as the AI input?
 
-No. Camera inference is performed locally from the camera frames. The cloud preview is an operator-visibility stream and may update at a lower rate without reducing the edge inference frame source to that rate.
+No. Camera inference is performed locally from camera frames. The server preview is an operator-visibility stream and may update at a lower rate.
 
 ## How is Hall sensor activity checked visually?
 
@@ -34,15 +42,11 @@ The configured Hall LED ROI is monitored for repeated brightness transitions. A 
 
 ## How are sensor positions checked?
 
-The user defines ROIs for sensor mounting areas and captures a baseline while the sensors are correctly installed. The edge compares current ROI appearance against that baseline across multiple frames. A substantial sustained change is reported as changed or missing.
+The user defines ROIs for sensor mounting areas and captures a baseline while the sensors are correctly installed. The edge compares current ROI appearance against that baseline across multiple frames. A sustained change is reported as changed or missing.
 
-## Why is the Recorded Demo useful?
+## Why is Recorded Demo separated from Physical Station?
 
-It provides a deterministic way to demonstrate all recorded conditions without commanding the physical motor. Matching physical recordings are selected continuously until the operator presses Stop.
-
-## What is the fixed-view Vision Safety Demo?
-
-It is a digital-twin-based inspection setup surface. The viewpoint is locked so hazard zones and sensor regions remain spatially stable, while machine motion and fault animation continue to follow replay RPM and condition state.
+Recorded Demo provides repeatable playback of the recorded conditions without exposing physical motor-control operations. The same diagnosis and visualization concepts can be demonstrated without commanding the real rig.
 
 ## Is NEXis a safety-rated system?
 

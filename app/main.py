@@ -187,7 +187,7 @@ def norm_roi(value:Any)->dict[str,float]:
 
 
 def vision_camera_snapshot()->dict[str,Any]:
-    data=read_json_file(VISION_CAMERA_PATH,{'revision':0,'requested_index':None})
+    data=read_json_file(VISION_CAMERA_PATH,{'revision':0,'requested_index':None,'refresh_revision':0})
     idx=data.get('requested_index',None)
     try:
         idx=None if idx is None else int(idx)
@@ -197,6 +197,7 @@ def vision_camera_snapshot()->dict[str,Any]:
     return {
       'revision':safe_int(data.get('revision',0) or 0,0,0,10**18),
       'requested_index':idx,
+      'refresh_revision':safe_int(data.get('refresh_revision',0) or 0,0,0,10**18),
       'updated_at':str(data.get('updated_at','') or '')
     }
 
@@ -545,11 +546,16 @@ async def vision_camera_select(req:Request):
         try: available.append(int(item.get('index') if isinstance(item,dict) else item))
         except Exception: pass
     if requested not in available:
-        raise HTTPException(409,'That camera is not currently available. Restart the Camera Connector if a webcam was just plugged in.')
+        raise HTTPException(409,'That camera is not currently available. Press Refresh Cameras after connecting or disconnecting camera hardware.')
     previous=vision_camera_snapshot()
     if previous.get('requested_index')==requested:
         return {'ok':True,'unchanged':True,**previous}
-    payload={'revision':max(now_ms(),safe_int(previous.get('revision',0),0,0,10**18)+1),'requested_index':requested,'updated_at':utcnow().isoformat()}
+    payload={
+      'revision':max(now_ms(),safe_int(previous.get('revision',0),0,0,10**18)+1),
+      'requested_index':requested,
+      'refresh_revision':safe_int(previous.get('refresh_revision',0),0,0,10**18),
+      'updated_at':utcnow().isoformat()
+    }
     atomic_json_write(VISION_CAMERA_PATH,payload)
     return {'ok':True,'unchanged':False,**payload}
 
@@ -557,7 +563,25 @@ async def vision_camera_select(req:Request):
 def vision_camera_off(req:Request):
     require_physical_operator(req)
     previous=vision_camera_snapshot()
-    payload={'revision':max(now_ms(),safe_int(previous.get('revision',0),0,0,10**18)+1),'requested_index':None,'updated_at':utcnow().isoformat()}
+    payload={
+      'revision':max(now_ms(),safe_int(previous.get('revision',0),0,0,10**18)+1),
+      'requested_index':None,
+      'refresh_revision':safe_int(previous.get('refresh_revision',0),0,0,10**18),
+      'updated_at':utcnow().isoformat()
+    }
+    atomic_json_write(VISION_CAMERA_PATH,payload)
+    return {'ok':True,**payload}
+
+@app.post('/api/vision/camera/refresh')
+def vision_camera_refresh(req:Request):
+    require_physical_operator(req)
+    previous=vision_camera_snapshot()
+    payload={
+      'revision':safe_int(previous.get('revision',0),0,0,10**18),
+      'requested_index':previous.get('requested_index'),
+      'refresh_revision':max(now_ms(),safe_int(previous.get('refresh_revision',0),0,0,10**18)+1),
+      'updated_at':utcnow().isoformat()
+    }
     atomic_json_write(VISION_CAMERA_PATH,payload)
     return {'ok':True,**payload}
 
