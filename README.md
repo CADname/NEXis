@@ -114,6 +114,10 @@ Implemented checks include:
 
 The preview overlays person, hand, and generic motion boxes with zone state and confidence/evidence values. Vision detections are supervisory inspection signals and are not safety-rated protective functions.
 
+<p align="center">
+  <img src="docs/images/vision_safety_demo.png" alt="NEXis fixed-view digital-twin vision setup with hazard zone and sensor regions" width="1000">
+</p>
+
 ## Condition diagnosis
 
 NEXis classifies four conditions:
@@ -124,6 +128,10 @@ NEXis classifies four conditions:
 - **Fastener Looseness**
 
 The repository includes the physical recordings, training code, model artifact, and evaluation outputs used by the application.
+
+<p align="center">
+  <img src="docs/images/ml_pipeline.png" alt="NEXis machine-learning pipeline" width="720">
+</p>
 
 | Metric | Recorded result |
 |---|---:|
