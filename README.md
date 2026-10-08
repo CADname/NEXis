@@ -150,6 +150,18 @@ The repository includes the physical recordings, training code, model artifact, 
   <img src="docs/images/confusion_matrix.png" alt="NEXis leave-one-file-out confusion matrix" width="610">
 </p>
 
+
+## Physical evidence
+
+The images below document the physical test setup used for the recorded rotating-machine experiments: the sensor layout and representative fault conditions.
+
+<p align="center">
+  <img src="docs/images/sensor_layout.png" alt="NEXis sensor layout on the physical rotating-machine rig" width="48%">
+  <img src="docs/images/fault_setup_examples.png" alt="Representative NEXis physical fault setups" width="48%">
+</p>
+
+The photos show the tested equipment and fault configurations; performance metrics apply to the supplied rig and acquisition procedure.
+
 ## Architecture
 
 ```mermaid
