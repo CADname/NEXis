@@ -10,12 +10,20 @@
 </p>
 
 <p align="center">
-  <a href="http://nexisai.duckdns.org"><strong>Live Demo</strong></a>
+  <a href="https://nexisai.duckdns.org"><strong>Live Demo</strong></a>
   &nbsp;·&nbsp;
   <a href="https://youtu.be/6Vdj4-uL7Y0"><strong>Demo Video</strong></a>
   &nbsp;·&nbsp;
   <a href="https://github.com/CADname/NEXis/actions/workflows/ci.yml"><strong>CI</strong></a>
 </p>
+
+## Judge access
+
+1. Open the [NEXis live demo](https://nexisai.duckdns.org).
+2. Sign in using the temporary evaluation credentials supplied with the hackathon submission.
+3. Select **Recorded Demo** to explore recorded physical inspections without operating live equipment.
+
+The Physical Station workspace can control connected equipment and is not intended for remote judges. If credentials were not included in the submission, contact the project owner for access.
 
 <p align="center">
   <img src="docs/images/nexis_hero.png" alt="NEXis physical inspection platform" width="920">
@@ -317,6 +325,6 @@ CI runs repository, evidence, Python, JavaScript, and shell checks on pushes and
 
 NEXis is an engineering prototype and **not a safety-rated PLC, emergency-stop system, interlock, machine guard, or certified quality station**. Physical safety mechanisms must remain independent of browser, camera, MQTT, cloud, and ESP32 software.
 
-The browser UI uses direct workspace selection instead of a user-login form. Internet-facing deployments should place NEXis behind an appropriate access-control layer or restrict network access to trusted users.
+The hosted demo requires sign-in before workspace selection. Evaluation credentials should be shared privately, and Physical Station motor-control access should be restricted. Internet-facing deployments require strong access controls.
 
 See [SECURITY.md](SECURITY.md) for deployment notes.
