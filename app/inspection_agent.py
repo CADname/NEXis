@@ -282,7 +282,7 @@ class InspectionAgent:
             # A new greeting must not inherit a long previous report or trigger tools.
             simple_greeting=bool(re.fullmatch(
                 r'(?:hi|hello|hey|hey there|hi there|yo|good morning|good afternoon|good evening|'
-                r'안녕|안녕하세요|하이|ㅎㅇ|반가워요?)[!?.~\s]*',
+                r'\uc548\ub155|\uc548\ub155\ud558\uc138\uc694|\ud558\uc774|\u314e\u3147|\ubc18\uac00\uc6cc\uc694?)[!?.~\s]*',
                 str(question).strip(), flags=re.IGNORECASE))
             if simple_greeting:
                 chat=[]
