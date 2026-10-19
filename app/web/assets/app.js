@@ -12,7 +12,7 @@ const PAGE_META={
   physical:['Live Inspection','Monitor the physical ESP32 station, sensors, motor, and AI diagnosis in one view.'],
   demo:['Recorded Demo','Replay recorded CSV scenarios in real time with AI diagnosis and the digital twin.'],
   ai:['AI Diagnosis','Review the current workspace diagnosis and recent AI history.'],
-  vision:['Vision Safety','Physical Station uses a live camera; Recorded Demo uses a fixed digital twin to configure hazard zones and sensor positions.'],
+  vision:['Vision Safety','Live camera safety and installation checks.'],
   recordings:['Data Recording','Capture raw telemetry from the current workspace to CSV.'],
   twin:['Digital Twin','View the equipment twin synchronized to live or replayed RPM.'],
   logs:['Event Log','Review operational events from the current workspace.']
@@ -27,7 +27,7 @@ const twins={physical:[],demo:[]};
 
 async function api(path,opt={}){
   const r=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opt.headers||{})},...opt});
-  if(r.status===401){showWorkspaceSelector();throw new Error('Workspace selection required.');}
+  if(r.status===401){showLogin();throw new Error('Authentication required.');}
   if(!r.ok){let t='';try{t=(await r.json()).detail}catch{}throw new Error(t||`HTTP ${r.status}`)}
   const ct=r.headers.get('content-type')||'';return ct.includes('json')?r.json():r;
 }
@@ -36,7 +36,8 @@ const num=(v,d=2)=>{const n=Number(v);return Number.isFinite(n)?n.toFixed(d):'�
 function setText(id,v){const e=$('#'+id);if(e)e.textContent=v}
 function setTone(id,tone){const e=$('#'+id);if(!e)return;e.classList.remove('tone-ok','tone-warn','tone-danger','tone-info');if(tone)e.classList.add('tone-'+tone)}
 function setTagTone(id,tone){const e=$('#'+id);if(!e)return;e.classList.remove('ok','warning','danger','neutral');e.classList.add(tone||'neutral')}
-function showWorkspaceSelector(){workspace=null;currentUser=null;document.body.classList.remove('workspace-physical','workspace-demo');$('#workspaceSelector').classList.remove('hidden');$('#app').classList.add('hidden')}
+function showLogin(){workspace=null;currentUser=null;document.body.classList.remove('workspace-physical','workspace-demo');$('#login').classList.remove('hidden');$('#workspaceSelector').classList.add('hidden');$('#app').classList.add('hidden')}
+function showWorkspaceSelector(){workspace=null;currentUser=null;document.body.classList.remove('workspace-physical','workspace-demo');$('#login').classList.add('hidden');$('#workspaceSelector').classList.remove('hidden');$('#app').classList.add('hidden')}
 function applyWorkspace(kind){workspace=kind==='demo'?'demo':'physical';document.body.classList.toggle('workspace-physical',workspace==='physical');document.body.classList.toggle('workspace-demo',workspace==='demo');$$('[data-workspace-only]').forEach(el=>el.classList.toggle('workspace-hidden',el.dataset.workspaceOnly!==workspace));const src=$('#recordSource');if(src)src.value=workspace;setText('recordSourceBadge',workspace==='physical'?'PHYSICAL STATION':'RECORDED DEMO');setText('captureSourceLabel',workspace==='physical'?'Physical LIVE':'LIVE Demo');setText('sourceChip',workspace==='physical'?'PHYSICAL DEVICE LIVE':'RECORDED LIVE DEMO');const first=workspace==='physical'?'physical':'demo';setPage(first);}
 function addLog(type,msg){logs.unshift({t:new Date(),type,msg});if(logs.length>200)logs.length=200;renderLogs()}
 function renderLogs(){const el=$('#logList');if(!el)return;el.innerHTML=logs.length?logs.map(x=>`<div class="log-row"><time>${x.t.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true})}</time><b>${esc(x.type)}</b><span>${esc(x.msg)}</span></div>`).join(''):'<div class="log-row"><time>—</time><b>SYSTEM</b><span>No events to display.</span></div>'}
@@ -47,12 +48,12 @@ function ensureTwins(){
 }
 function twinEach(kind,fn){for(const t of twins[kind])try{fn(t)}catch{}}
 function showApp(user){
-  currentUser=user;applyWorkspace(user.workspace);$('#workspaceSelector').classList.add('hidden');$('#app').classList.remove('hidden');
-  setText('accountName',workspace==='physical'?'Physical Station':'Recorded Demo');setText('accountRole','DIRECT ACCESS');setText('avatar',workspace==='physical'?'P':'D');
+  currentUser=user;applyWorkspace(user.workspace);$('#login').classList.add('hidden');$('#workspaceSelector').classList.add('hidden');$('#app').classList.remove('hidden');
+  setText('accountName',workspace==='physical'?'Physical Station':'Recorded Demo');setText('accountRole','ADMIN');setText('avatar',workspace==='physical'?'P':'D');
   const requestedPage=new URLSearchParams(location.search).get('page');
   if(requestedPage&&PAGE_META[requestedPage]&&!(requestedPage==='physical'&&workspace!=='physical')&&!(requestedPage==='demo'&&workspace!=='demo'))setPage(requestedPage);
   if(location.search)history.replaceState({},'',location.pathname);
-  ensureTwins();connectWS();renderAllProbabilities();if(workspace==='physical'){setPhysicalMonitoring(false);loadControlStatus();visionLoadAll()}else{setDemoUI(null,false);loadCatalog();demoVisionLoadConfig()}loadRecordings();loadRecordingStatus();loadHistory();renderCaptureTable();addLog('SYSTEM',`Direct access · ${workspace==='physical'?'PHYSICAL STATION':'RECORDED DEMO'} connected`);
+  ensureTwins();connectWS();renderAllProbabilities();if(workspace==='physical'){setPhysicalMonitoring(false);loadControlStatus();visionLoadAll()}else{setDemoUI(null,false);loadCatalog();demoVisionLoadConfig()}loadRecordings();loadRecordingStatus();loadHistory();renderCaptureTable();addLog('SYSTEM',`Admin session · ${workspace==='physical'?'PHYSICAL STATION':'RECORDED DEMO'} connected`);
 }
 
 function connectWS(){
@@ -86,12 +87,26 @@ async function enterWorkspace(kind){
   const btn=kind==='physical'?$('#physicalEnterBtn'):$('#demoEnterBtn');
   if(btn)btn.disabled=true;
   try{const u=await api('/api/enter',{method:'POST',body:JSON.stringify({workspace:kind})});showApp(u)}
-  catch(err){alert(err.message);showWorkspaceSelector()}
+  catch(err){alert(err.message);if(err.message!=='Authentication required.')showWorkspaceSelector()}
   finally{if(btn)btn.disabled=false}
 }
 $('#physicalEnterBtn')?.addEventListener('click',()=>enterWorkspace('physical'));
 $('#demoEnterBtn')?.addEventListener('click',()=>enterWorkspace('demo'));
-$('#switchWorkspaceBtn').addEventListener('click',async()=>{try{await api('/api/workspace/leave',{method:'POST'})}catch{}if(ws)ws.close();if(heartbeat)clearInterval(heartbeat);currentUser=null;showWorkspaceSelector()});
+$('#nexisLoginForm')?.addEventListener('submit',async e=>{
+  e.preventDefault(); const btn=$('#nexisLoginSubmit');if(btn.disabled)return;
+  btn.disabled=true;setText('nexisLoginError','');
+  try{await api('/api/login',{method:'POST',body:JSON.stringify({username:$('#nexisLoginUser').value.trim(),password:$('#nexisLoginPassword').value})});$('#nexisLoginPassword').value='';showWorkspaceSelector()}
+  catch(err){setText('nexisLoginError',err.message)}finally{btn.disabled=false}
+});
+$('#logoutBtn').addEventListener('click',async()=>{
+  try{await api('/api/workspace/return',{method:'POST',body:'{}'});if(ws)ws.close();if(heartbeat)clearInterval(heartbeat);showWorkspaceSelector()}
+  catch(err){alert(err.message)}
+});
+$('#signOutBtn')?.addEventListener('click',async()=>{
+  try{await api('/api/logout',{method:'POST',body:'{}'})}catch(_){ }
+  if(ws)ws.close();if(heartbeat)clearInterval(heartbeat);
+  $('#nexisLoginPassword').value='';showLogin();
+});
 
 function clearStream(kind){
   const s=streams[kind];s.buffer=blankBuffer();s.fft={freq:[],amp:[],dominant:0};s.sampleCounter=0;s.lastTelemetryAt=null;s.lastPred=null;s.recentRows.length=0;
@@ -100,7 +115,7 @@ function clearStream(kind){
   scheduleCharts(kind,true);renderCaptureTable();
 }
 function setPhysicalMonitoring(active){
-  const s=streams.physical;s.monitoring=!!active;setText('pMonitorState',active?'RUNNING':'STOPPED');setTone('pMonitorState',active?'ok':'warn');
+  const s=streams.physical;s.monitoring=!!active;setText('pMonitorState',active?'RUNNING':'STOPPED');setTone('pMonitorState',active?'ok':'warn');setText('ovPhysicalMonitoring',active?'Monitoring':'Stopped');
   $('#physicalMonitorStart').disabled=active;$('#physicalMonitorStop').disabled=!active;
   if(active){clearStream('physical');addLog('PHYSICAL','Physical monitoring started · sensor telemetry remains visible from 0 RPM')}else addLog('PHYSICAL','Physical screen monitoring stopped · MQTT reception and motor control remain active');
 }
@@ -114,10 +129,11 @@ async function stopDemo(){try{await api('/api/replay/stop',{method:'POST'})}catc
 $$('[data-demo-scenario]').forEach(b=>b.addEventListener('click',()=>startDemo(b.dataset.demoScenario)));$('#demoStop').addEventListener('click',stopDemo);
 function setDemoUI(state,active,complete=false){
   const s=streams.demo;if(state)s.scenario=state;s.active=!!active;s.monitoring=!!active;
-  const info=SCENARIO[s.scenario]||{title:'Waiting for scenario',desc:'Select a condition.'};setText('demoScenarioTitle',active?`${info.title} · replaying`:(complete?`${info.title} · complete`:'Waiting for scenario'));setText('demoScenarioDesc',active?info.desc:'Select a condition. Recorded CSV files in that class will be chosen randomly and replayed continuously until Stop is pressed.');setText('dMonitorState',active?'RUNNING':(complete?'COMPLETE':'READY'));setTone('dMonitorState',active?'ok':(complete?'info':'warn'));setText('dScenario',s.scenario?FAULT_LABELS[s.scenario]:'—');setText('dMetricScenario',s.scenario?FAULT_LABELS[s.scenario]:'—');
-  setText('dTwinState',active?`${FAULT_LABELS[s.scenario]} · Replaying`:(complete?`${FAULT_LABELS[s.scenario]} · Complete`:'Waiting for scenario'));setText('twinDemoState',active?`${FAULT_LABELS[s.scenario]} · Replaying`:'Waiting for scenario');
+  const info=SCENARIO[s.scenario]||{title:'Waiting for scenario',desc:'Select a condition.'};setText('demoScenarioTitle',active?`${info.title} · replaying`:(complete?`${info.title} · complete`:'Waiting for scenario'));setText('demoScenarioDesc',active?info.desc:'Select a condition. Recorded CSV files in that class will be chosen randomly and replayed continuously until Stop is pressed.');setText('dMonitorState',active?'RUNNING':(complete?'COMPLETE':'READY'));setTone('dMonitorState',active?'ok':(complete?'info':'warn'));setText('dScenario',s.scenario?FAULT_LABELS[s.scenario]:'—');setText('ovDemoScenario',active?FAULT_LABELS[s.scenario]:(complete?'COMPLETE':'READY'));setText('dMetricScenario',s.scenario?FAULT_LABELS[s.scenario]:'—');
+  setText('dTwinState',active?`${FAULT_LABELS[s.scenario]} · · replaying`:(complete?`${FAULT_LABELS[s.scenario]} · · complete`:'Waiting for scenario'));setText('ovDemoTwinState',active?`${FAULT_LABELS[s.scenario]} · · replaying`:'Waiting for scenario');setText('twinDemoState',active?`${FAULT_LABELS[s.scenario]} · · replaying`:'Waiting for scenario');
   $('#demoStop').disabled=!active;$$('[data-demo-scenario]').forEach(b=>b.classList.toggle('running',active&&b.dataset.demoScenario===s.scenario));
   twinEach('demo',t=>t.setScenario(s.scenario||'normal',active));demoVisionRenderRuntime();
+  const chip=$('#ovDemoChip');if(chip){chip.textContent=active?'DEMO RUNNING':(complete?'DEMO COMPLETE':'DEMO READY');chip.classList.toggle('online',active);chip.classList.toggle('offline',!active)}
   const tchip=$('#twinDemoChip');if(tchip){tchip.textContent=active?'RUNNING':'READY';tchip.classList.toggle('online',active);tchip.classList.toggle('offline',!active)}
 }
 
@@ -128,9 +144,9 @@ function routeTelemetry(m){const kind=m.stream||(m.row?.source==='esp32'?'physic
 function renderTelemetry(kind,m){
   const s=streams[kind],r=m.row||{};s.lastRow=r;s.lastTelemetryAt=new Date();
   if(kind==='physical'){
-    twinEach('physical',t=>t.setTelemetry(r));setText('pTwinState',Number(r.rpm)>5?`Physical ${num(r.rpm,0)} RPM`:'Physical Station Stopped');setText('twinPhysicalState',Number(r.rpm)>5?`Live ${num(r.rpm,0)} RPM`:'Physical Station Stopped');
+    twinEach('physical',t=>t.setTelemetry(r));setText('ovPhysicalRpm',`${num(r.rpm,0)} rpm`);setText('ovPhysicalCurrent',`${num(r.current_a,3)} A`);setText('ovPhysicalPwm',num(r.pwm_eq,2));setText('ovPhysicalUpdate',`Last telemetry ${s.lastTelemetryAt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true})}`);setText('pTwinState',Number(r.rpm)>5?`Physical ${num(r.rpm,0)} RPM`:'Physical Station Stopped');setText('ovPhysicalTwinState',Number(r.rpm)>5?`${num(r.rpm,0)} RPM synchronized`:'Physical Station Stopped');setText('twinPhysicalState',Number(r.rpm)>5?`Live ${num(r.rpm,0)} RPM`:'Physical Station Stopped');
   }else{
-    twinEach('demo',t=>t.setTelemetry(r));demoVisionRenderRuntime();setText('dTwinState',`${FAULT_LABELS[s.scenario]||'Demo'} · ${num(r.rpm,0)} RPM`);setText('twinDemoState',`${FAULT_LABELS[s.scenario]||'Demo'} · ${num(r.rpm,0)} RPM`);
+    twinEach('demo',t=>t.setTelemetry(r));demoVisionRenderRuntime();setText('ovDemoRpm',`${num(r.rpm,0)} rpm`);setText('ovDemoCurrent',`${num(r.current_a,3)} A`);setText('ovDemoUpdate',`Last demo sample ${s.lastTelemetryAt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true})}`);setText('dTwinState',`${FAULT_LABELS[s.scenario]||'Demo'} · ${num(r.rpm,0)} RPM`);setText('ovDemoTwinState',`${FAULT_LABELS[s.scenario]||'Demo'} · ${num(r.rpm,0)} RPM`);setText('twinDemoState',`${FAULT_LABELS[s.scenario]||'Demo'} · ${num(r.rpm,0)} RPM`);
   }
   handlePrediction(kind,m);
   s.recentRows.unshift(r);if(s.recentRows.length>14)s.recentRows.length=14;
@@ -142,18 +158,18 @@ function renderTelemetry(kind,m){
 function renderMetrics(kind,r){
   const s=streams[kind],st=stats(s.buffer.total),time=s.lastTelemetryAt?s.lastTelemetryAt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}):'—';
   if(kind==='physical'){
-    setText('pSamples',String(s.sampleCounter));setText('pLastUpdate',time);setText('pTotal',`${num(r.total_g,4)} g`);setText('pRms',st.rms.toFixed(4));setText('pPtp',`${st.ptp.toFixed(4)} g`);setText('pCurrent',num(r.current_a,3));setText('pRpm',num(r.rpm,0));setText('pTargetRpm',`${num(r.target_rpm,0)} rpm`);setText('pRpmError',`${num(r.rpm_error,1)} rpm`);setText('pPwm',num(r.pwm_eq,2));setText('pDuty',`${num(r.duty_10bit,0)} / 1023`);setText('pAcs',`${num(r.acs_v,3)} V`);setText('pMode',r.control_mode||'—');setText('pDominantFreq',`${s.fft.dominant.toFixed(2)} Hz`);
+    setText('pSamples',String(s.sampleCounter));setText('ovPhysicalSamples',String(s.sampleCounter));setText('pLastUpdate',time);setText('pTotal',`${num(r.total_g,4)} g`);setText('pRms',st.rms.toFixed(4));setText('pPtp',`${st.ptp.toFixed(4)} g`);setText('pCurrent',num(r.current_a,3));setText('pRpm',num(r.rpm,0));setText('pTargetRpm',`${num(r.target_rpm,0)} rpm`);setText('pRpmError',`${num(r.rpm_error,1)} rpm`);setText('pPwm',num(r.pwm_eq,2));setText('pDuty',`${num(r.duty_10bit,0)} / 1023`);setText('pAcs',`${num(r.acs_v,3)} V`);setText('pMode',r.control_mode||'—');setText('pDominantFreq',`${s.fft.dominant.toFixed(2)} Hz`);
   }else{
-    setText('dSamples',String(s.sampleCounter));setText('dLastUpdate',time);setText('dTotal',`${num(r.total_g,4)} g`);setText('dRms',st.rms.toFixed(4));setText('dPtp',`${st.ptp.toFixed(4)} g`);setText('dCurrent',num(r.current_a,3));setText('dRpm',num(r.rpm,0));setText('dDominantFreq',`${s.fft.dominant.toFixed(2)} Hz`);
+    setText('dSamples',String(s.sampleCounter));setText('ovDemoSamples',String(s.sampleCounter));setText('dLastUpdate',time);setText('dTotal',`${num(r.total_g,4)} g`);setText('dRms',st.rms.toFixed(4));setText('ovDemoRms',`${st.rms.toFixed(4)} g`);setText('dPtp',`${st.ptp.toFixed(4)} g`);setText('dCurrent',num(r.current_a,3));setText('dRpm',num(r.rpm,0));setText('dDominantFreq',`${s.fft.dominant.toFixed(2)} Hz`);
   }
 }
 function handlePrediction(kind,m){
   const s=streams[kind];
   if(m.prediction&&!m.prediction.error){s.lastPred=m.prediction;const label=m.prediction.pred_label_name,conf=Number(m.prediction.top_prob||0);twinEach(kind,t=>t.setDiagnosis(label));
-    if(kind==='physical'){renderProb('pProbabilities',m.prediction.probabilities);setText('pDiagnosis',FAULT_LABELS[label]||label);setTone('pDiagnosis',label==='normal'?'ok':'danger');setText('pDiagnosisText',`Confidence ${(conf*100).toFixed(1)}%`);setText('pAiState','ACTIVE');setTagTone('pAiState',label==='normal'?'ok':'danger');setText('pAiGate','ACTIVE');setTone('pAiGate','ok');setText('aiPhysicalDiagnosis',FAULT_LABELS[label]||label);setText('aiPhysicalConfidence',`${(conf*100).toFixed(1)}%`);setText('aiPhysicalText','Diagnosis from the live physical sensor window');}
-    else{renderProb('dProbabilities',m.prediction.probabilities);setText('dDiagnosis',FAULT_LABELS[label]||label);setTone('dDiagnosis',label==='normal'?'ok':'danger');setText('dDiagnosisText',`Confidence ${(conf*100).toFixed(1)}%`);setText('dAiState','ACTIVE');setTagTone('dAiState',label==='normal'?'ok':'danger');setText('aiDemoDiagnosis',FAULT_LABELS[label]||label);setText('aiDemoConfidence',`${(conf*100).toFixed(1)}%`);setText('aiDemoText',`${FAULT_LABELS[streams.demo.scenario]||'Demo'} replay window-based diagnosis`);}
+    if(kind==='physical'){renderProb('pProbabilities',m.prediction.probabilities);setText('pDiagnosis',FAULT_LABELS[label]||label);setTone('pDiagnosis',label==='normal'?'ok':'danger');setText('pDiagnosisText',`Confidence ${(conf*100).toFixed(1)}%`);setText('pAiState','ACTIVE');setTagTone('pAiState',label==='normal'?'ok':'danger');setText('pAiGate','ACTIVE');setTone('pAiGate','ok');setText('ovPhysicalAi',FAULT_LABELS[label]||label);setText('aiPhysicalDiagnosis',FAULT_LABELS[label]||label);setText('aiPhysicalConfidence',`${(conf*100).toFixed(1)}%`);setText('aiPhysicalText','Diagnosis from the live physical sensor window');}
+    else{renderProb('dProbabilities',m.prediction.probabilities);setText('dDiagnosis',FAULT_LABELS[label]||label);setTone('dDiagnosis',label==='normal'?'ok':'danger');setText('dDiagnosisText',`Confidence ${(conf*100).toFixed(1)}%`);setText('dAiState','ACTIVE');setTagTone('dAiState',label==='normal'?'ok':'danger');setText('ovDemoAi',FAULT_LABELS[label]||label);setText('aiDemoDiagnosis',FAULT_LABELS[label]||label);setText('aiDemoConfidence',`${(conf*100).toFixed(1)}%`);setText('aiDemoText',`${FAULT_LABELS[streams.demo.scenario]||'Demo'} replay window-based diagnosis`);}
     const now=Date.now();if(now-historyTimer>2500){historyTimer=now;loadHistory()}
-  }else if(kind==='physical'&&m.ai_eligible===false){s.lastPred=null;renderProb('pProbabilities',null);setText('pDiagnosis','Waiting for operating conditions');setTone('pDiagnosis','warn');setText('pDiagnosisText',`Sensors are live. AI starts above 70% of target RPM (minimum ${num(m.ai_min_rpm,0)} RPM).`);setText('pAiState','WAIT');setTagTone('pAiState','warning');setText('pAiGate','WAIT');setTone('pAiGate','warn');setText('aiPhysicalDiagnosis','Waiting for operating conditions');setText('aiPhysicalConfidence','—');setText('aiPhysicalText','Stopped and low-speed data are excluded from the Physical AI window');}
+  }else if(kind==='physical'&&m.ai_eligible===false){s.lastPred=null;renderProb('pProbabilities',null);setText('pDiagnosis','Waiting for operating conditions');setTone('pDiagnosis','warn');setText('pDiagnosisText',`Sensors are live. AI starts above 70% of target RPM (minimum ${num(m.ai_min_rpm,0)} RPM).`);setText('pAiState','WAIT');setTagTone('pAiState','warning');setText('pAiGate','WAIT');setTone('pAiGate','warn');setText('ovPhysicalAi','Waiting for operating conditions');setText('aiPhysicalDiagnosis','Waiting for operating conditions');setText('aiPhysicalConfidence','—');setText('aiPhysicalText','Stopped and low-speed data are excluded from the Physical AI window');}
 }
 function renderProb(id,probs){const el=$('#'+id);if(!el)return;const p=probs||{normal:0,unbalance:0,misalignment:0,looseness:0};el.innerHTML=['normal','unbalance','misalignment','looseness'].map(k=>{const v=Math.max(0,Math.min(1,Number(p[k])||0));return `<div class="prob-row"><span>${FAULT_LABELS[k]}</span><div class="prob-bar"><i style="width:${(v*100).toFixed(1)}%"></i></div><b>${(v*100).toFixed(1)}%</b></div>`}).join('')}
 function renderAllProbabilities(){renderProb('pProbabilities',null);renderProb('dProbabilities',null)}
@@ -168,8 +184,8 @@ function renderControlStatus(c){
   if(workspace!=='physical')return;const dev=c.device||{},online=!!c.edge_online,local=dev.remote_enabled===true,row=streams.physical.lastRow||{};
   setText('ctrlEdge',online?'ONLINE':'OFFLINE');setText('pLinkState',online?'ONLINE':'OFFLINE');setTone('pLinkState',online?'ok':'danger');setText('ctrlMode',dev.control_mode||row.control_mode||'IDLE');setText('ctrlActual',`${num(dev.rpm??row.rpm,0)} RPM`);setText('ctrlTarget',`${num(dev.target_rpm??row.target_rpm,0)} RPM`);setText('ctrlRpmError',`Error ${num(row.rpm_error,1)} RPM`);setText('ctrlPwm',num(row.pwm_eq,2));setText('ctrlDuty',`Duty ${num(row.duty_10bit,0)} / 1023`);setText('ctrlCurrent',`${num(row.current_a,3)} A`);setText('ctrlAcs',`ACS ${num(row.acs_v,3)} V`);setText('ctrlLastSeen',online?'Heartbeat healthy':'Waiting for heartbeat');
   const chip=$('#ctrlEdgeChip');if(chip){chip.textContent=online?'ESP32 ONLINE':'ESP32 OFFLINE';chip.classList.toggle('online',online);chip.classList.toggle('offline',!online)}
-  const operator=currentUser?.role==='operator';$('#ctrlStartBtn').disabled=!operator||!online||!local;$('#ctrlStopBtn').disabled=!operator;
-  if(!operator)setText('ctrlMessage','Physical control is available only in the Physical Station workspace.');else if(!online)setText('ctrlMessage','Start/stop becomes available when the ESP32 connects to AWS.');else if(!local)setText('ctrlMessage','Check ESP32 remote command reception.');else setText('ctrlMessage','Enter a target RPM and press Start Motor. Stop can be sent at any time.');
+  const admin=currentUser?.role==='admin';$('#ctrlStartBtn').disabled=!admin||!online||!local;$('#ctrlStopBtn').disabled=!admin;
+  if(!admin)setText('ctrlMessage','Only administrators can control the physical station.');else if(!online)setText('ctrlMessage','Start/stop becomes available when the ESP32 connects to AWS.');else if(!local)setText('ctrlMessage','Check ESP32 remote command reception.');else setText('ctrlMessage','Enter a target RPM and press Start Motor. Stop can be sent at any time.');
 }
 async function loadControlStatus(){if(!currentUser||workspace!=='physical')return;try{renderControlStatus(await api('/api/control/status'))}catch(e){setText('ctrlMessage',e.message)}}
 $('#ctrlStartBtn').addEventListener('click',async()=>{try{const rpm=Math.round(Number($('#ctrlRpmInput').value));const r=await api('/api/control/start',{method:'POST',body:JSON.stringify({rpm})});renderControlStatus(r);addLog('CONTROL',`Motor start · target ${rpm} RPM`)}catch(e){setText('ctrlMessage',e.message);alert(e.message)}});
@@ -205,7 +221,7 @@ const VISION_TOOL_HELP={
   acs712:'Box the ACS712 mount.',
   hall_sensor:'Box the Hall sensor mount.'
 };
-function visionDefaultConfig(){return{schema_revision:3,hazard_polygon:[],warning_margin_px:90,rois:{},baseline_revision:0,baseline_required:true,setup_frame_width:0,setup_frame_height:0,setup_camera_index:-1}}
+function visionDefaultConfig(){return{version:3,hazard_polygon:[],warning_margin_px:90,rois:{},baseline_revision:0,baseline_required:true,setup_frame_width:0,setup_frame_height:0,setup_camera_index:-1}}
 function visionClone(x){return JSON.parse(JSON.stringify(x||visionDefaultConfig()))}
 function visionTone(id,tone){const e=$('#'+id);if(!e)return;e.classList.remove('vision-status-ok','vision-status-warn','vision-status-danger');if(tone)e.classList.add('vision-status-'+tone)}
 function visionFrameIsLive(){const st=visionState.status||{},meta=visionState.serverMeta||{},required=Number(visionState.edgeInfo?.required_protocol||3),protocolOk=Number(st.vision_protocol||0)>=required,statusAge=Number.isFinite(Number(meta.edge_age_s))?Number(meta.edge_age_s):(st.server_received_ts?Math.max(0,Date.now()/1000-Number(st.server_received_ts)):9999),frameAge=Number.isFinite(Number(meta.frame_age_s))?Number(meta.frame_age_s):(visionState.frameMtime?Math.max(0,Date.now()/1000-Number(visionState.frameMtime)):9999),stage=$('#visionStage'),reportedW=Number(st.frame_width||0),reportedH=Number(st.frame_height||0),dimsMatch=reportedW>0&&reportedH>0&&visionState.frameNaturalW===reportedW&&visionState.frameNaturalH===reportedH;return protocolOk&&st.camera_ok===true&&meta.frame_available===true&&statusAge<5&&frameAge<5&&dimsMatch&&!!stage?.classList.contains('has-frame')}
@@ -220,7 +236,7 @@ function visionSetTool(tool){
 function visionNormalizeLoaded(cfg){
   if(!cfg||!cfg.configured)return visionDefaultConfig();
   const m=Number(cfg.warning_margin_px??90),margin=Number.isFinite(m)?Math.max(0,Math.min(500,m)):90;
-  return{schema_revision:3,revision:cfg.revision||0,baseline_revision:cfg.baseline_revision||0,baseline_required:cfg.baseline_required!==false,hazard_polygon:Array.isArray(cfg.hazard_polygon)?cfg.hazard_polygon:[],warning_margin_px:margin,rois:cfg.rois&&typeof cfg.rois==='object'?cfg.rois:{},setup_frame_width:Number(cfg.setup_frame_width||0),setup_frame_height:Number(cfg.setup_frame_height||0),setup_camera_index:Number.isFinite(Number(cfg.setup_camera_index))?Number(cfg.setup_camera_index):-1};
+  return{version:3,revision:cfg.revision||0,baseline_revision:cfg.baseline_revision||0,baseline_required:cfg.baseline_required!==false,hazard_polygon:Array.isArray(cfg.hazard_polygon)?cfg.hazard_polygon:[],warning_margin_px:margin,rois:cfg.rois&&typeof cfg.rois==='object'?cfg.rois:{},setup_frame_width:Number(cfg.setup_frame_width||0),setup_frame_height:Number(cfg.setup_frame_height||0),setup_camera_index:Number.isFinite(Number(cfg.setup_camera_index))?Number(cfg.setup_camera_index):-1};
 }
 async function visionLoadConfig(){
   if(workspace!=='physical'||!currentUser)return;
@@ -257,7 +273,7 @@ async function visionSelectCamera(index){
 async function visionCameraOff(){
   const online=Number.isFinite(Number(visionState.serverMeta?.edge_age_s))&&Number(visionState.serverMeta.edge_age_s)<5;if(!online){alert('Vision Edge is offline.');return}
   if(!visionState.status?.camera_ok){setText('visionCameraChoiceHint','The camera is already off.');return}
-  try{setText('visionCameraChoiceHint','Turning camera off…');await api('/api/vision/camera/off',{method:'POST'});addLog('VISION','Camera turned off from the dashboard');visionHideStaleFrame('Camera is off. Select a camera above.');setTimeout(()=>visionRefreshStatus(),500)}catch(e){setText('visionCameraChoiceHint',e.message);alert(e.message)}
+  try{setText('visionCameraChoiceHint','Turning camera off…');await api('/api/vision/camera/off',{method:'POST'});addLog('VISION','Camera turned off from the dashboard');visionHideStaleFrame('Camera is off. Select a camera below.');setTimeout(()=>visionRefreshStatus(),500)}catch(e){setText('visionCameraChoiceHint',e.message);alert(e.message)}
 }
 async function visionRefreshCameras(){
   const online=Number.isFinite(Number(visionState.serverMeta?.edge_age_s))&&Number(visionState.serverMeta.edge_age_s)<5;if(!online){alert('Vision Edge is offline.');return}
@@ -278,7 +294,7 @@ function renderVisionStatus(v={},wrapper=null){
   const requiredProtocol=Number(visionState.edgeInfo?.required_protocol||3),edgeProtocol=Number(v.vision_protocol||0),edgeProtocolOk=edgeProtocol>=requiredProtocol,configured=meta.configured!==undefined?!!meta.configured:(!!v.configured||!!visionState.config?.hazard_polygon?.length),savedRev=Number(meta.config_revision??visionState.config?.revision??0),edgeRev=Number(v.config_revision||0),synced=!configured||(savedRev>0&&edgeRev===savedRev),frameCompatRaw=v.frame_config_compatible,frameCompatible=!configured||(edgeProtocolOk&&frameCompatRaw===true),frameMismatch=configured&&edgeProtocolOk&&frameCompatRaw===false;
   const detectorOk=online&&v.person_detector_ok===true,persons=Number(v.person_count||0),zone=String(v.person_zone||'unknown').toLowerCase();
   if(!online||!cam){setText('visionPersonCount','—');setText('visionPersonZone','Checking');visionTone('visionPersonZone','warn');setText('visionPersonDetail',!online?'Edge offline':'Select camera');visionTone('visionPersonDetail','warn')}
-  else if(!edgeProtocolOk){setText('visionPersonCount','—');setText('visionPersonZone','Update Required');visionTone('visionPersonZone','warn');setText('visionPersonDetail','Restart the Windows Vision Edge with the compatible connector.');visionTone('visionPersonDetail','warn')}
+  else if(!edgeProtocolOk){setText('visionPersonCount','—');setText('visionPersonZone','Update Required');visionTone('visionPersonZone','warn');setText('visionPersonDetail','Restart the Windows Vision Edge with the current release.');visionTone('visionPersonDetail','warn')}
   else if(configured&&!synced){setText('visionPersonCount','—');setText('visionPersonZone','Syncing Setup');visionTone('visionPersonZone','warn');setText('visionPersonDetail','Syncing setup');visionTone('visionPersonDetail','warn')}
   else if(configured&&!frameCompatible){setText('visionPersonCount','—');setText('visionPersonZone','Reconfiguration Required');visionTone('visionPersonZone','warn');setText('visionPersonDetail',frameMismatch?'The camera or frame geometry changed. Save the setup again.':'Verifying camera setup.');visionTone('visionPersonDetail','warn')}
   else if(!detectorOk){setText('visionPersonCount','—');setText('visionPersonZone','Unavailable');visionTone('visionPersonZone','warn');setText('visionPersonDetail','Detector unavailable');visionTone('visionPersonDetail','warn')}
@@ -350,10 +366,12 @@ function visionCancelEdit(){visionState.config=visionClone(visionState.savedConf
 async function visionLoadAll(){if(workspace!=='physical'||!currentUser)return;await Promise.allSettled([visionLoadConfig(),visionLoadEdgeInfo(),visionRefreshStatus()])}
 $$('.vision-tool').forEach(b=>b.addEventListener('click',()=>visionSetTool(b.dataset.visionTool)));$('#visionUndoPoint')?.addEventListener('click',visionUndo);$('#visionCancelEdit')?.addEventListener('click',visionCancelEdit);$('#visionSaveConfig')?.addEventListener('click',visionSave);$('#visionCaptureBaseline')?.addEventListener('click',visionBaseline);$('#visionResetConfig')?.addEventListener('click',visionReset);$('#visionRefresh')?.addEventListener('click',()=>visionRefreshStatus());$('#visionReloadConfig')?.addEventListener('click',visionLoadConfig);$('#visionCameraRefresh')?.addEventListener('click',visionRefreshCameras);$('#visionCameraOff')?.addEventListener('click',visionCameraOff);
 $('#visionFrameImg')?.addEventListener('load',visionImageLoaded);$('#visionFrameImg')?.addEventListener('error',visionImageError);$('#visionOverlay')?.addEventListener('pointerdown',visionPointerDown);$('#visionOverlay')?.addEventListener('pointermove',visionPointerMove);$('#visionOverlay')?.addEventListener('pointerup',visionPointerUp);$('#visionOverlay')?.addEventListener('pointercancel',()=>{visionState.dragStart=null;visionState.tempRect=null;visionDrawOverlay()});$('#visionOverlay')?.addEventListener('contextmenu',e=>{e.preventDefault();visionUndo()});
+
+
 const demoVisionState={config:null,savedConfig:null,tool:null,dragStart:null,tempRect:null};
-function demoVisionDefaultConfig(){return{schema_revision:1,hazard_polygon:[],warning_margin_px:90,rois:{},baseline_revision:0,baseline_required:true}}
+function demoVisionDefaultConfig(){return{version:1,hazard_polygon:[],warning_margin_px:90,rois:{},baseline_revision:0,baseline_required:true}}
 function demoVisionClone(x){return JSON.parse(JSON.stringify(x||demoVisionDefaultConfig()))}
-function demoVisionNormalize(cfg){if(!cfg||!cfg.configured)return demoVisionDefaultConfig();const m=Number(cfg.warning_margin_px??90);return{schema_revision:1,revision:Number(cfg.revision||0),hazard_polygon:Array.isArray(cfg.hazard_polygon)?cfg.hazard_polygon:[],warning_margin_px:Number.isFinite(m)?Math.max(0,Math.min(500,m)):90,rois:cfg.rois&&typeof cfg.rois==='object'?cfg.rois:{},baseline_revision:Number(cfg.baseline_revision||0),baseline_required:cfg.baseline_required!==false}}
+function demoVisionNormalize(cfg){if(!cfg||!cfg.configured)return demoVisionDefaultConfig();const m=Number(cfg.warning_margin_px??90);return{version:1,revision:Number(cfg.revision||0),hazard_polygon:Array.isArray(cfg.hazard_polygon)?cfg.hazard_polygon:[],warning_margin_px:Number.isFinite(m)?Math.max(0,Math.min(500,m)):90,rois:cfg.rois&&typeof cfg.rois==='object'?cfg.rois:{},baseline_revision:Number(cfg.baseline_revision||0),baseline_required:cfg.baseline_required!==false}}
 function demoVisionBaselineReady(){const c=demoVisionState.config;return !!c&&Number(c.baseline_revision||0)>0&&c.baseline_required===false}
 function demoVisionSetTool(tool){demoVisionState.tool=tool||null;demoVisionState.dragStart=null;demoVisionState.tempRect=null;$$('.demo-vision-tool').forEach(b=>b.classList.toggle('active',b.dataset.demoVisionTool===tool));setText('demoVisionToolLabel',tool?`Edit · ${tool==='hazard'?'Hazard Zone':VISION_ROI_LABELS[tool]||tool}`:'View');setText('demoVisionToolHelp',tool?(VISION_TOOL_HELP[tool]||'Draw the area on the fixed digital twin.'):'Use the fixed digital twin as the inspection view. Choose an item below to edit.');demoVisionDrawOverlay()}
 function demoVisionCanvasPrep(){const c=$('#demoVisionOverlay');if(!c)return null;const d=Math.min(devicePixelRatio||1,2),w=Math.max(1,c.clientWidth),h=Math.max(1,c.clientHeight);if(c.width!==Math.floor(w*d)||c.height!==Math.floor(h*d)){c.width=Math.floor(w*d);c.height=Math.floor(h*d)}const ctx=c.getContext('2d');ctx.setTransform(d,0,0,d,0,0);ctx.clearRect(0,0,w,h);return{c,ctx,w,h}}
@@ -375,8 +393,11 @@ $('#resetPhysicalTwin').addEventListener('click',()=>twinEach('physical',t=>t.re
 function tickClock(){setText('clock',new Date().toLocaleString('en-US',{month:'2-digit',day:'2-digit',weekday:'short',hour:'2-digit',minute:'2-digit',second:'2-digit'}))}
 setInterval(tickClock,1000);setInterval(updateRecordingClock,100);setInterval(()=>{if(currentUser&&workspace==='physical'&&$('.page.active')?.id==='vision'&&visionState.status?.camera_ok===true&&visionState.status?.local_preview_ready===true)visionRefreshFrame()},80);controlTimer=setInterval(()=>{if(currentUser){if(workspace==='physical'){loadControlStatus();visionRefreshStatus();}loadRecordingStatus();if($('.page.active')?.id==='recordings')loadRecordings()}},1500);tickClock();renderLogs();renderAllProbabilities();
 (async()=>{
-  const q=new URLSearchParams(location.search),auto=q.get('auto')==='1',requested=q.get('workspace');
-  if(auto&&(requested==='physical'||requested==='demo')){await enterWorkspace(requested);return}
-  try{showApp(await api('/api/me'))}catch{showWorkspaceSelector()}
+  try{
+    const user=await api('/api/me');
+    if(user.workspace==='selector')showWorkspaceSelector();
+    else if(user.workspace==='physical'||user.workspace==='demo')showApp(user);
+    else showLogin();
+  }catch{showLogin()}
 })();
 })();

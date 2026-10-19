@@ -5,20 +5,32 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width,initial-scale=1" name="viewport"/>
 <title>NEXis · AI Machine Commissioning &amp; Inspection</title>
-<link href="/assets/dashboard.css" rel="stylesheet"/>
+<link href="/assets/dashboard.css?v=5.8.7" rel="stylesheet"/>
+<link rel="stylesheet" href="/assets/inspection_agent.css?v=5"/>
 </head>
 <body>
-<div class="workspace-screen workspace-selector-screen" id="workspaceSelector">
-<div class="workspace-console">
-<header class="workspace-console-head">
-<div class="workspace-brand-lockup"><img alt="NEXis" src="/assets/nexis_logo.png"/><div><b>NEXis</b><span>AI Machine Commissioning &amp; Inspection</span></div></div>
-<div class="workspace-system-badge"><i></i>Direct Access</div>
-</header>
+<div class="nexis-first-login" id="login">
+  <form class="nexis-login-card" id="nexisLoginForm" autocomplete="on">
+    <img class="nexis-login-logo" src="/assets/nexis_logo.png" alt="NEXis"/>
+    <span class="nexis-login-kicker">NEXis · MACHINE INSPECTION</span>
+    <h1>Sign in</h1>
+    <p>Sign in to select a workspace and access AI-powered inspections.</p>
+    <label for="nexisLoginUser">Username</label>
+    <input id="nexisLoginUser" name="username" autocomplete="username" required maxlength="100"/>
+    <label for="nexisLoginPassword">Password</label>
+    <input id="nexisLoginPassword" name="password" type="password" autocomplete="current-password" required maxlength="256"/>
+    <p id="nexisLoginError" class="nexis-login-error" role="alert" aria-live="polite"></p>
+    <button id="nexisLoginSubmit" type="submit">Sign in</button>
+  </form>
+</div>
+<div class="login-screen workspace-login-screen hidden" id="workspaceSelector">
+<div class="login-console">
+<header class="login-console-head"><div class="login-brand-lockup"><img alt="NEXis" src="/assets/nexis_logo.png"/><div><b>NEXis</b><span>AI Machine Commissioning &amp; Inspection</span></div></div><div class="login-system-badge"><i></i>Signed in</div></header>
 <div class="workspace-selector direct-workspace-selector">
 <section class="workspace-selector-copy">
 <span class="section-kicker"></span>
 <h1>Choose a workspace.</h1>
-<p>Enter directly without signing in. Choose Physical Station or Recorded Demo.</p>
+<p>Choose Physical Station or Recorded Demo after signing in.</p>
 <div class="selector-facts"><span>ESP32 Live</span><span>Vision AI</span><span>4-State Diagnosis</span><span>Digital Twin</span></div>
 </section>
 <section class="workspace-card physical-entry">
@@ -34,14 +46,15 @@
 <button class="op-button primary wide workspace-enter" id="demoEnterBtn" type="button">Open Recorded Demo</button>
 </section>
 </div>
-<footer class="workspace-console-foot"><span>NEXis Machine Inspection Console</span><span>Direct workspace selection</span></footer>
+<footer class="login-console-foot"><span>NEXis Machine Inspection Console</span><span>Authenticated workspace selection</span></footer>
+<div class="nexis-selector-actions"><button id="signOutBtn" type="button" class="plain-button">Sign out</button></div>
 </div>
 </div>
 <div class="app hidden" id="app">
 <header class="topbar">
 <div class="top-brand"><img alt="NEXis" src="/assets/nexis_logo.png"/><div><b>NEXis</b><span>Machine Commissioning &amp; Inspection</span></div></div>
 <div class="top-status"><span class="system-online" id="systemOnlineLabel"><i></i>Cloud Connected</span><span class="workspace-badge" id="sourceChip">Workspace</span><span class="clock" id="clock">—</span></div>
-<div class="account"><span class="avatar" id="avatar">P</span><div><b id="accountName">Physical Station</b><small id="accountRole">Direct Access</small></div><button class="plain-button" id="switchWorkspaceBtn">Switch Workspace</button></div>
+<div class="account"><span class="avatar" id="avatar">P</span><div><b id="accountName">Physical Station</b><small id="accountRole">ADMIN</small></div><button class="plain-button" id="logoutBtn">Switch Workspace</button></div>
 </header>
 <aside class="sidebar">
 <div class="side-section-label">Menu</div>
@@ -49,6 +62,7 @@
 <button class="nav-item" data-page="physical" data-workspace-only="physical"><span class="nav-glyph">▣</span><span>Live Inspection</span></button>
 <button class="nav-item" data-page="demo" data-workspace-only="demo"><span class="nav-glyph">▶</span><span>Recorded Demo</span></button>
 <button class="nav-item" data-page="ai"><span class="nav-glyph">AI</span><span>AI Diagnosis</span></button>
+<button class="nav-item" data-page="agent"><span class="nav-glyph">✦</span><span>AI Agent</span></button>
 <button class="nav-item" data-page="vision"><span class="nav-glyph">CV</span><span>Vision Safety</span></button>
 <button class="nav-item" data-page="recordings"><span class="nav-glyph">REC</span><span>Data Recording</span></button>
 <button class="nav-item" data-page="twin"><span class="nav-glyph">3D</span><span>Digital Twin</span></button>
@@ -142,6 +156,38 @@
 </div>
 <article class="panel table-panel"><div class="panel-head"><div><small></small><h3>Recent AI Diagnoses</h3></div></div><div class="table-scroll"><table><thead><tr><th>Time</th><th>Predicted Condition</th><th>Confidence</th><th>Ground Truth</th><th>Source</th></tr></thead><tbody id="historyTable"></tbody></table></div></article>
 </section>
+<section class="page nexis-agent-page" id="agent">
+<div class="agent-page-head">
+  <div><span class="section-kicker">NVIDIA · Nebius Token Factory</span>
+  <h2>Inspection Agent</h2>
+  <p>AI-powered evidence review for rotating machinery trial inspections.</p></div>
+  <div class="agent-page-badges"><span class="agent-model-name">Nemotron 3 Ultra</span><span class="agent-state" id="inspectionAgentStatus">Checking status</span></div>
+</div>
+<div class="agent-page-grid" id="nexisAgentPanel">
+  <aside class="agent-evidence-panel panel">
+    <div class="agent-panel-title"><div><small>INSPECTION HISTORY</small><h3>Physical Events</h3></div><button class="op-button secondary" id="inspectionAgentRefresh" type="button">Refresh</button></div>
+    <div class="agent-event-list" id="inspectionAgentEvents" aria-live="polite"><p class="agent-notice">Loading inspection history…</p></div>
+    <div class="agent-evidence-footer">Events are recorded after repeated fault predictions in Physical Station. Recorded Demo data remains isolated.</div>
+  </aside>
+  <div class="agent-chat-panel panel">
+    <div class="agent-panel-title"><div><small>READ-ONLY INVESTIGATION</small><h3>Evidence Analysis</h3></div><span class="agent-readonly-tag">No motor control</span></div>
+    <div id="inspectionAgentMessages" class="agent-messages" aria-live="polite">
+      <div class="agent-empty"><span class="agent-empty-icon">✦</span><strong>Ask about your inspection data</strong><p>Review vibration, current, RPM, classifier history, and vision status. Get evidence-based inspection and retest recommendations.</p></div>
+    </div>
+    <div class="agent-shortcuts" aria-label="Suggested questions">
+      <button class="agent-suggestion" type="button" data-agent-prompt="Summarize the latest measurements and classification results, citing the available evidence.">Latest readings</button>
+      <button class="agent-suggestion" type="button" data-agent-prompt="Review recent anomalies and explain likely causes, uncertainty, and safe inspection steps.">Investigate faults</button>
+      <button class="agent-suggestion" type="button" data-agent-prompt="Recommend an inspection and retest sequence based only on available evidence.">Retest plan</button>
+    </div>
+    <form id="inspectionAgentForm" class="agent-form">
+      <textarea id="inspectionAgentQuestion" rows="2" maxlength="1200" placeholder="Ask a question about the current inspection…" aria-label="Question for inspection agent"></textarea>
+      <button class="op-button primary" id="inspectionAgentSend" type="submit">Send <span aria-hidden="true">↗</span></button>
+    </form>
+    <p class="agent-disclaimer">Advisory only · Tool-backed investigation · Final quality decisions remain with the operator</p>
+  </div>
+</div>
+</section>
+
 <section class="page" id="vision">
 <div data-workspace-only="physical" id="physicalVisionWorkspace">
 <div class="subpage-toolbar vision-page-toolbar"><div><span class="section-kicker"></span><h2>Vision Safety</h2></div><div class="toolbar-actions"><button class="op-button secondary" id="visionRefresh">Refresh Frame</button><button class="op-button secondary" id="visionReloadConfig">Reload Setup</button></div></div>
@@ -284,7 +330,8 @@
 </main>
 </div>
 <div class="modal hidden" id="referenceModal"><div class="modal-backdrop" data-close-modal=""></div><div class="modal-card"><div class="modal-head"><div><b>Physical Reference Image</b><span>Physical-machine reference for the digital twin</span></div><button class="plain-button" data-close-modal="">Close</button></div><img alt="Physical rotating equipment station" src="/assets/rig_reference.png"/></div></div>
-<script src="/assets/digital_twin.js"></script>
-<script src="/assets/app.js"></script>
+<script src="/assets/digital_twin.js?v=5.8.7"></script>
+<script src="/assets/app.js?v=login4"></script>
+<script src="/assets/inspection_agent.js?v=5"></script>
 </body>
 </html>

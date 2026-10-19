@@ -1,5 +1,5 @@
 from __future__ import annotations
-import asyncio, csv, hashlib, hmac, json, math, os, secrets, threading, time, uuid
+import asyncio, csv, hashlib, hmac, json, math, os, secrets, shutil, threading, time, uuid
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from paho.mqtt import client as mqtt
 from sqlalchemy import create_engine, text
 
+from inspection_agent import InspectionAgent
 from ai_model import FaultModel
 
 APP_DIR=Path(__file__).resolve().parent
@@ -21,6 +22,8 @@ MODEL_PATH=APP_DIR/'model'/'multi_fault_current_csv_model.joblib'
 RECORDING_ROOT=Path(os.getenv('RECORDING_ROOT','/runtime/recordings'))
 RECORDING_ROOT.mkdir(parents=True, exist_ok=True)
 DB_DSN=os.getenv('DATABASE_DSN','postgresql://nexis:change-me@db:5432/nexis')
+ADMIN_USER=os.getenv('ADMIN_USER','admin')
+ADMIN_PASSWORD=os.getenv('ADMIN_PASSWORD','')
 COOKIE_SECURE=os.getenv('COOKIE_SECURE','false').strip().lower() in {'1','true','yes','on'}
 MQTT_HOST=os.getenv('MQTT_HOST','mqtt')
 MQTT_PORT=int(os.getenv('MQTT_PORT','1883'))
@@ -51,10 +54,14 @@ VISION_EDGE_PROTOCOL=3
 
 engine=create_engine(DB_DSN, pool_pre_ping=True)
 model=FaultModel(MODEL_PATH)
-app=FastAPI(title='NEXis Machine Inspection Platform')
+app=FastAPI(title='NEXis AI End-of-Line Spin Inspection')
 app.mount('/assets', StaticFiles(directory=str(WEB_DIR/'assets')), name='assets')
 
 sessions:dict[str,dict[str,Any]]={}
+# Failed login attempts by IP (single-owner kiosk, kept in memory).
+login_failures:dict[str,deque]=defaultdict(deque)
+LOGIN_ATTEMPT_WINDOW=900
+LOGIN_ATTEMPT_LIMIT=5
 owner_ws:dict[tuple[str,str],set[WebSocket]]=defaultdict(set)
 replay_tasks:dict[str,asyncio.Task]={}
 replay_last_file:dict[str,str]={}
@@ -75,6 +82,7 @@ control_state:dict[str,Any]={
 }
 
 FAULTS=('normal','unbalance','misalignment','looseness')
+agent=InspectionAgent(engine,latest,windows,control_state,broadcast=lambda owner,payload,workspace: broadcast(owner,payload,workspace))
 VISION_ROI_KEYS=('hall_led','rotor','adxl345','acs712','hall_sensor')
 
 
@@ -235,21 +243,29 @@ def init_db():
 
 
 def new_session(role:str, username:str, workspace:str)->tuple[str,dict[str,Any]]:
-    workspace='demo' if workspace=='demo' else 'physical'
+    if workspace not in ('selector','physical','demo'):
+        raise ValueError('Invalid session workspace')
     token=secrets.token_urlsafe(32)
-    owner_id='physical-station' if workspace=='physical' else f'demo-{uuid.uuid4().hex}'
-    data={'role':role,'username':username,'owner_id':owner_id,'workspace':workspace,'created':time.time()}
+    owner_id='admin' if role=='admin' else f'guest-{uuid.uuid4().hex}'
+    data={'role':role,'username':username,'owner_id':owner_id,'workspace':workspace,
+          'created':time.time(),'agent_verified':role=='admin'}
     sessions[token]=data
     return token,data
 
-def session_from_request(request:Request)->dict[str,Any]:
-    token=request.cookies.get('nexis_session','')
+def valid_session(token:str)->dict[str,Any]|None:
     data=sessions.get(token)
-    if not data: raise HTTPException(401,'Workspace session required.')
+    if data and time.time()-float(data.get('created',0))>12*3600:
+        sessions.pop(token,None)
+        return None
+    return data
+
+def session_from_request(request:Request)->dict[str,Any]:
+    data=valid_session(request.cookies.get('nexis_session',''))
+    if not data: raise HTTPException(401,'Authentication required.')
     return data
 
 def session_from_ws(ws:WebSocket)->dict[str,Any]|None:
-    return sessions.get(ws.cookies.get('nexis_session',''))
+    return valid_session(ws.cookies.get('nexis_session',''))
 
 def require_workspace(req:Request, workspace:str)->dict[str,Any]:
     s=session_from_request(req)
@@ -257,14 +273,24 @@ def require_workspace(req:Request, workspace:str)->dict[str,Any]:
         raise HTTPException(403,'This feature is not available in the current workspace.')
     return s
 
-def require_physical_operator(req:Request)->dict[str,Any]:
+def require_physical_admin(req:Request)->dict[str,Any]:
     s=require_workspace(req,'physical')
-    if s.get('role')!='operator':
-        raise HTTPException(403,'Physical control is available only in the Physical Station workspace.')
+    if s.get('role')!='admin':
+        raise HTTPException(403,'Only administrators can remotely control the physical station.')
     return s
 
 def set_cookie(resp:Response, token:str):
     resp.set_cookie('nexis_session',token,httponly=True,samesite='lax',secure=COOKIE_SECURE,max_age=12*3600,path='/')
+
+def same_origin(req:Request)->None:
+    origin=req.headers.get('origin','')
+    if origin:
+        from urllib.parse import urlsplit
+        try:
+            if urlsplit(origin).netloc.lower()!=req.headers.get('host','').lower():
+                raise HTTPException(403,'Cross-origin request is not allowed.')
+        except ValueError:
+            raise HTTPException(403,'Invalid request origin.')
 
 def catalog():
     out={k:[] for k in FAULTS}
@@ -370,6 +396,10 @@ async def ingest(owner_id:str,row:dict[str,Any],truth:str|None=None):
                     c.execute(text('''INSERT INTO predictions(owner_id,predicted,confidence,probabilities,source,fault_truth)
                       VALUES(:o,:p,:c,CAST(:pr AS JSONB),:s,:t)'''),
                       {'o':owner_id,'p':pred['pred_label_name'],'c':pred['top_prob'],'pr':json.dumps(pred['probabilities']),'s':row['source'],'t':truth})
+                # Read-only advisory agent observes model output; motor logic is unchanged.
+                if source=='esp32':
+                    try: agent.on_prediction(owner_id,row,pred)
+                    except Exception as agent_exc: print('[AGENT] event error:',type(agent_exc).__name__)
             except Exception as e:
                 pred={'error':str(e)}
     else:
@@ -387,7 +417,7 @@ async def ingest_physical_batch(samples:list[dict[str,Any]]):
         if not isinstance(sample,dict):
             continue
         row=normalize_row(sample,'esp32',sensor_id=str(sample.get('sensor_id','ESP32-AWS-DIRECT')))
-        await ingest('physical-station',row,None)
+        await ingest('admin',row,None)
 
 async def replay_worker(owner_id:str,state:str,speed:float,continuous:bool=True):
     last_filename=replay_last_file.get(owner_id)
@@ -421,6 +451,22 @@ async def replay_worker(owner_id:str,state:str,speed:float,continuous:bool=True)
         replay_tasks.pop(owner_id,None)
 
 
+def cleanup_guest(owner_id:str):
+    task=replay_tasks.pop(owner_id,None)
+    if task: task.cancel()
+    rec=recording_handles.pop((owner_id,'demo'),None)
+    if rec:
+        try: rec['file'].close()
+        except Exception: pass
+    with engine.begin() as c:
+        c.execute(text('DELETE FROM predictions WHERE owner_id=:o'),{'o':owner_id})
+        c.execute(text('DELETE FROM telemetry WHERE owner_id=:o'),{'o':owner_id})
+        c.execute(text('DELETE FROM recordings WHERE owner_id=:o'),{'o':owner_id})
+    shutil.rmtree(RECORDING_ROOT/owner_id,ignore_errors=True)
+    agent.delete_guest(owner_id)
+    latest.pop(owner_id,None); replay_last_file.pop(owner_id,None)
+    for key in [k for k in list(windows) if k[0]==owner_id]: windows.pop(key,None)
+    for key in [k for k in list(stream_counters) if k[0]==owner_id]: stream_counters.pop(key,None)
 
 def now_ms()->int:
     return int(time.time()*1000)
@@ -435,10 +481,10 @@ def server_armed()->bool:
     return now_ms()<int(control_state.get('server_arm_until_ms') or 0)
 
 
-def require_operator(req:Request)->dict[str,Any]:
+def require_admin(req:Request)->dict[str,Any]:
     s=session_from_request(req)
-    if s.get('role')!='operator':
-        raise HTTPException(403,'Physical control is available only in the Physical Station workspace.')
+    if s.get('role')!='admin':
+        raise HTTPException(403,'Only administrators can remotely control the physical station.')
     return s
 
 
@@ -475,7 +521,7 @@ def validate_runtime_config():
 async def startup():
     global loop
     validate_runtime_config()
-    loop=asyncio.get_running_loop(); init_db(); start_mqtt()
+    loop=asyncio.get_running_loop(); init_db(); agent.init_db(); start_mqtt()
 
 @app.get('/',response_class=HTMLResponse)
 def root(): return (WEB_DIR/'index.html').read_text(encoding='utf-8')
@@ -514,17 +560,17 @@ def vision_status(req:Request):
 
 @app.get('/api/vision/config')
 def vision_get_config(req:Request):
-    require_physical_operator(req)
+    require_physical_admin(req)
     return vision_config_snapshot()
 
 @app.get('/api/vision/camera')
 def vision_camera_get(req:Request):
-    require_physical_operator(req)
+    require_physical_admin(req)
     return {'ok':True,**vision_camera_snapshot()}
 
 @app.post('/api/vision/camera/select')
 async def vision_camera_select(req:Request):
-    require_physical_operator(req)
+    require_physical_admin(req)
     try:
         body=await req.json()
     except Exception:
@@ -546,7 +592,7 @@ async def vision_camera_select(req:Request):
         try: available.append(int(item.get('index') if isinstance(item,dict) else item))
         except Exception: pass
     if requested not in available:
-        raise HTTPException(409,'That camera is not currently available. Press Refresh Cameras after connecting or disconnecting camera hardware.')
+        raise HTTPException(409,'That camera is not currently available. Press Refresh Cameras after plugging in or removing a webcam.')
     previous=vision_camera_snapshot()
     if previous.get('requested_index')==requested:
         return {'ok':True,'unchanged':True,**previous}
@@ -561,7 +607,7 @@ async def vision_camera_select(req:Request):
 
 @app.post('/api/vision/camera/off')
 def vision_camera_off(req:Request):
-    require_physical_operator(req)
+    require_physical_admin(req)
     previous=vision_camera_snapshot()
     payload={
       'revision':max(now_ms(),safe_int(previous.get('revision',0),0,0,10**18)+1),
@@ -574,7 +620,7 @@ def vision_camera_off(req:Request):
 
 @app.post('/api/vision/camera/refresh')
 def vision_camera_refresh(req:Request):
-    require_physical_operator(req)
+    require_physical_admin(req)
     previous=vision_camera_snapshot()
     payload={
       'revision':safe_int(previous.get('revision',0),0,0,10**18),
@@ -587,7 +633,7 @@ def vision_camera_refresh(req:Request):
 
 @app.post('/api/vision/config')
 async def vision_save_config(req:Request):
-    require_physical_operator(req)
+    require_physical_admin(req)
     try:
         body=await req.json()
     except Exception:
@@ -638,7 +684,7 @@ async def vision_save_config(req:Request):
         prev_w=safe_int(previous.get('setup_frame_width',0) or 0,0,0,10000) if previous else 0
         prev_h=safe_int(previous.get('setup_frame_height',0) or 0,0,0,10000) if previous else 0
         prev_camera=safe_int(previous.get('setup_camera_index',-1),-1,-1,64) if previous else -1
-        schema_ok=bool(previous) and safe_int(previous.get('schema_revision',0),0,0,100)>=3
+        schema_ok=bool(previous) and safe_int(previous.get('version',0),0,0,100)>=3
         geometry_same=schema_ok and previous.get('hazard_polygon')==polygon and previous.get('rois')==rois and safe_int(previous.get('warning_margin_px',90),90,0,500)==warning_margin
         frame_ok=prev_w==setup_w and prev_h==setup_h and prev_w>=16 and prev_h>=16
         camera_ok=prev_camera>=0 and prev_camera==setup_camera
@@ -647,7 +693,7 @@ async def vision_save_config(req:Request):
             return {'ok':True,'unchanged':True,**previous}
         rev=max(now_ms(),safe_int(previous.get('revision',0),0,0,10**18)+1)
         payload={
-          'schema_revision':3,'revision':rev,'baseline_revision':0,
+          'version':3,'revision':rev,'baseline_revision':0,
           'hazard_polygon':polygon,'warning_margin_px':warning_margin,
           'rois':rois,
           'setup_frame_width':setup_w,
@@ -660,7 +706,7 @@ async def vision_save_config(req:Request):
 
 @app.post('/api/vision/baseline')
 def vision_capture_baseline(req:Request):
-    require_physical_operator(req)
+    require_physical_admin(req)
     status=read_json_file(VISION_STATUS_PATH)
     try: age=max(0.0,time.time()-float(status.get('server_received_ts',0.0))) if status else 9999.0
     except Exception: age=9999.0
@@ -685,7 +731,7 @@ def vision_capture_baseline(req:Request):
 
 @app.delete('/api/vision/config')
 def vision_reset_config(req:Request):
-    require_physical_operator(req)
+    require_physical_admin(req)
     with VISION_CONFIG_LOCK:
         unlink_if_exists(VISION_CONFIG_PATH)
         previous_reset=read_json_file(VISION_RESET_PATH,{'reset_revision':0})
@@ -718,7 +764,7 @@ def vision_frame(req:Request):
 
 @app.get('/api/vision/edge-info')
 def vision_edge_info(req:Request):
-    require_physical_operator(req)
+    require_physical_admin(req)
     token=vision_edge_token()
     return {'server_url':str(req.base_url).rstrip('/'),'token':token,'ready':bool(token),'required_protocol':VISION_EDGE_PROTOCOL,'preview_mode':'cloud-jpeg'}
 
@@ -751,7 +797,7 @@ async def vision_edge_status(req:Request):
             cfg['baseline_required']=False
             cfg['baseline_confirmed_at']=utcnow().isoformat()
             atomic_json_write(VISION_CONFIG_PATH,cfg)
-    await broadcast('physical-station',{'event':'vision_status','vision':body},'physical')
+    await broadcast('admin',{'event':'vision_status','vision':body},'physical')
     return {'ok':True}
 
 @app.post('/api/vision/edge/frame')
@@ -813,7 +859,7 @@ async def demo_vision_save_config(req:Request):
             revision=max(now_ms(),safe_int(previous.get('revision',0),0,0,10**18)+1 if previous else now_ms())
             baseline_revision=0
             baseline_required=True
-        payload={'schema_revision':1,'revision':revision,'hazard_polygon':polygon,'warning_margin_px':warning_margin,'rois':rois,'baseline_revision':baseline_revision,'baseline_required':baseline_required,'updated_at':utcnow().isoformat()}
+        payload={'version':1,'revision':revision,'hazard_polygon':polygon,'warning_margin_px':warning_margin,'rois':rois,'baseline_revision':baseline_revision,'baseline_required':baseline_required,'updated_at':utcnow().isoformat()}
         atomic_json_write(DEMO_VISION_CONFIG_PATH,payload)
     return {'ok':True,'unchanged':geometry_same,**payload}
 
@@ -836,47 +882,85 @@ def demo_vision_reset_config(req:Request):
         except FileNotFoundError: pass
     return {'ok':True,'configured':False}
 
-def direct_workspace_response(req:Request, workspace:str)->JSONResponse:
+def select_workspace(req:Request,workspace:str)->JSONResponse:
+    same_origin(req)
     workspace=str(workspace or '').strip().lower()
     if workspace not in ('physical','demo'):
-        raise HTTPException(400,'workspace must be either physical or demo.')
+        raise HTTPException(400,'workspace must be physical or demo.')
+    current=session_from_request(req)
+    if current.get('role')!='admin' or current.get('workspace')!='selector':
+        raise HTTPException(403,'Sign in first, then select a workspace.')
     old=req.cookies.get('nexis_session','')
-    if old:
-        sessions.pop(old,None)
-    role='operator' if workspace=='physical' else 'demo'
-    token,data=new_session(role,'Physical Station' if workspace=='physical' else 'Recorded Demo',workspace)
-    r=JSONResponse({'ok':True,**data,'direct_access':True})
-    set_cookie(r,token)
-    return r
+    sessions.pop(old,None)
+    token,data=new_session('admin',current['username'],workspace)
+    resp=JSONResponse({'ok':True,**data})
+    set_cookie(resp,token)
+    return resp
 
 @app.post('/api/enter')
 async def enter_workspace(req:Request):
-    """Direct workspace selector used by the kiosk UI (no username/password form)."""
-    try:
-        body=await req.json()
-    except Exception:
-        raise HTTPException(400,'Workspace selection must be valid JSON.')
-    if not isinstance(body,dict):
-        raise HTTPException(400,'Workspace selection must be a JSON object.')
-    return direct_workspace_response(req,body.get('workspace',''))
+    try: body=await req.json()
+    except Exception: raise HTTPException(400,'Invalid JSON.')
+    if not isinstance(body,dict):raise HTTPException(400,'Invalid request body.')
+    return select_workspace(req,body.get('workspace',''))
 
 @app.post('/api/enter/{workspace}')
-def enter_workspace_path(workspace:str, req:Request):
-    """Convenience endpoint used by the one-click Windows camera connector."""
-    return direct_workspace_response(req,workspace)
+def enter_workspace_path(workspace:str,req:Request):
+    # Legacy URL must never create an unauthenticated admin session.
+    return select_workspace(req,workspace)
 
+@app.post('/api/login')
+async def login(req:Request):
+    same_origin(req)
+    ip=req.client.host if req.client else 'unknown'
+    attempts=login_failures[ip]; now=time.monotonic()
+    while attempts and now-attempts[0]>LOGIN_ATTEMPT_WINDOW:attempts.popleft()
+    if len(attempts)>=LOGIN_ATTEMPT_LIMIT:
+        raise HTTPException(429,'Too many login attempts. Try again in 15 minutes.')
+    try: body=await req.json()
+    except Exception:raise HTTPException(400,'Invalid JSON.')
+    if not isinstance(body,dict):raise HTTPException(400,'Invalid request body.')
+    user=str(body.get('username',''))[:256]
+    password=str(body.get('password',''))[:256]
+    if not (ADMIN_USER and ADMIN_PASSWORD and hmac.compare_digest(user,ADMIN_USER) and hmac.compare_digest(password,ADMIN_PASSWORD)):
+        attempts.append(now)
+        raise HTTPException(401,'Invalid username or password.')
+    attempts.clear()
+    previous=req.cookies.get('nexis_session','')
+    sessions.pop(previous,None)
+    token,data=new_session('admin',user,'selector')
+    resp=JSONResponse({'ok':True,**data})
+    set_cookie(resp,token)
+    return resp
 
+@app.post('/api/guest')
+def guest():
+    # Disable old unprotected visitor token creation.
+    raise HTTPException(403,'Sign in is required.')
+
+@app.post('/api/workspace/return')
+def return_to_workspaces(req:Request):
+    same_origin(req)
+    current=session_from_request(req)
+    if current.get('role')!='admin':raise HTTPException(403,'Sign in is required.')
+    if current.get('workspace')=='demo':
+        t=replay_tasks.pop(current['owner_id'],None)
+        if t:t.cancel()
+    old=req.cookies.get('nexis_session','')
+    sessions.pop(old,None)
+    token,data=new_session('admin',current['username'],'selector')
+    resp=JSONResponse({'ok':True,**data})
+    set_cookie(resp,token)
+    return resp
 
 @app.get('/api/me')
 def me(req:Request): return session_from_request(req)
 
-@app.post('/api/workspace/leave')
-def leave_workspace(req:Request):
-    token=req.cookies.get('nexis_session','')
-    sessions.pop(token,None)
-    r=JSONResponse({'ok':True})
-    r.delete_cookie('nexis_session',path='/')
-    return r
+@app.post('/api/logout')
+def logout(req:Request):
+    token=req.cookies.get('nexis_session',''); data=sessions.pop(token,None)
+    if data and data['role']=='guest': cleanup_guest(data['owner_id'])
+    r=JSONResponse({'ok':True,'guest_data_deleted':bool(data and data['role']=='guest')}); r.delete_cookie('nexis_session',path='/'); return r
 
 @app.get('/api/replay/catalog')
 def replay_catalog(req:Request):
@@ -985,6 +1069,49 @@ def history(req:Request):
         p=c.execute(text('SELECT predicted,confidence,probabilities,source,fault_truth,ts FROM predictions WHERE owner_id=:o AND source=:src ORDER BY ts DESC LIMIT 30'),{'o':s['owner_id'],'src':source}).mappings().all()
     return [dict(x) for x in p]
 
+@app.get('/api/agent/status')
+def inspection_agent_status(req:Request):
+    s=session_from_request(req)
+    return {**agent.state(),'owner_signin_required':False,'access':bool(s.get('agent_verified')) and s.get('workspace') in ('physical','demo'),'workspace':s['workspace']}
+
+@app.get('/api/agent/events')
+def inspection_agent_events(req:Request):
+    s=session_from_request(req)
+    if not s.get('agent_verified'):
+        return {'events':[],'locked':True}
+    return {'events':agent.events(s['owner_id'],10) if s['workspace']=='physical' else [],'locked':False}
+
+@app.post('/api/agent/ask')
+async def inspection_agent_ask(req:Request):
+    s=agent.authorized(req,session_from_request)
+    try: body=await req.json()
+    except Exception: raise HTTPException(400,'A JSON body is required.')
+    if not isinstance(body,dict): raise HTTPException(400,'A JSON object is required.')
+    question=str(body.get('question') or '').strip()
+    if not (1<=len(question)<=1200): raise HTTPException(400,'Enter a question between 1 and 1200 characters.')
+    owner=s['owner_id']; workspace=s['workspace']; chat_key=(owner,workspace)
+    now=time.monotonic()
+    if now-agent.last_chat.get(chat_key,-9999)<8:
+        raise HTTPException(429,'Please wait 8 seconds before trying again.')
+    agent.last_chat[chat_key]=now
+    try:return await agent.investigate(owner,question,workspace=workspace)
+    except HTTPException:raise
+    except Exception as exc:
+        print('[AGENT] investigate failure:',type(exc).__name__)
+        raise HTTPException(502,'AI investigation failed. Check the server log and Nebius configuration.') from None
+
+@app.post('/api/agent/events/{event_id}/analyze')
+async def inspection_agent_review_event(event_id:str,req:Request):
+    s=agent.authorized(req,session_from_request)
+    if s['workspace']!='physical':raise HTTPException(403,'This event is only available in Physical Station.')
+    if len(event_id)!=32 or not all(c in '0123456789abcdef' for c in event_id):
+        raise HTTPException(400,'Invalid event ID.')
+    try:return await agent.analyze_existing_event(s['owner_id'],event_id)
+    except HTTPException:raise
+    except Exception as exc:
+        print('[AGENT] event analysis failed:',type(exc).__name__)
+        raise HTTPException(502,'Event analysis failed. Check the server log.') from None
+
 @app.get('/api/control/status')
 def control_status(req:Request):
     require_workspace(req,'physical')
@@ -993,7 +1120,7 @@ def control_status(req:Request):
 
 @app.post('/api/control/arm')
 async def control_arm(req:Request):
-    require_physical_operator(req)
+    require_physical_admin(req)
     body=await req.json()
     arm=bool(body.get('arm',True))
     if not arm:
@@ -1011,7 +1138,7 @@ async def control_arm(req:Request):
 
 @app.post('/api/control/start')
 async def control_start(req:Request):
-    require_physical_operator(req)
+    require_physical_admin(req)
     body=await req.json()
     if not edge_online(): raise HTTPException(409,'Physical ESP32 station is offline')
     dev=control_state.get('device') or {}
@@ -1022,13 +1149,13 @@ async def control_start(req:Request):
         raise HTTPException(400,f'RPM must be between {REMOTE_RPM_MIN} and {REMOTE_RPM_MAX}.')
     control_state['server_arm_until_ms']=now_ms()+REMOTE_ARM_SECONDS*1000
     cmd=publish_control('SET_RPM',rpm)
-    await broadcast('physical-station',{'event':'control_command','control':control_snapshot()},'physical')
+    await broadcast('admin',{'event':'control_command','control':control_snapshot()},'physical')
     return {'ok':True,'command':cmd,**control_snapshot()}
 
 
 @app.post('/api/control/target')
 async def control_target(req:Request):
-    require_physical_operator(req)
+    require_physical_admin(req)
     body=await req.json()
     if not edge_online(): raise HTTPException(409,'Physical ESP32 station is offline')
     if not server_armed(): raise HTTPException(409,'Remote control must be armed from the dashboard.')
@@ -1039,16 +1166,16 @@ async def control_target(req:Request):
     if rpm<REMOTE_RPM_MIN or rpm>REMOTE_RPM_MAX:
         raise HTTPException(400,f'RPM must be between {REMOTE_RPM_MIN} and {REMOTE_RPM_MAX}.')
     cmd=publish_control('SET_RPM',rpm)
-    await broadcast('physical-station',{'event':'control_command','control':control_snapshot()},'physical')
+    await broadcast('admin',{'event':'control_command','control':control_snapshot()},'physical')
     return {'ok':True,'command':cmd,**control_snapshot()}
 
 
 @app.post('/api/control/stop')
 async def control_stop(req:Request):
-    require_physical_operator(req)
+    require_physical_admin(req)
     control_state['server_arm_until_ms']=0
     cmd=publish_control('STOP',0)
-    await broadcast('physical-station',{'event':'control_command','control':control_snapshot()},'physical')
+    await broadcast('admin',{'event':'control_command','control':control_snapshot()},'physical')
     return {'ok':True,'command':cmd,**control_snapshot()}
 
 
@@ -1099,17 +1226,17 @@ def start_mqtt():
                 if isinstance(payload,dict):
                     control_state['device']=payload
                     control_state['device_last_seen_ms']=now
-                    submit(broadcast('physical-station',{'event':'control_status','control':control_snapshot()},'physical'))
+                    submit(broadcast('admin',{'event':'control_status','control':control_snapshot()},'physical'))
                 return
             if topic.endswith('/health'):
                 if isinstance(payload,dict):
                     control_state['health']=payload
                     control_state['device_last_seen_ms']=now
-                    submit(broadcast('physical-station',{'event':'control_health','control':control_snapshot()},'physical'))
+                    submit(broadcast('admin',{'event':'control_health','control':control_snapshot()},'physical'))
                 return
             if isinstance(payload,dict):
-                owner=str(payload.pop('owner_id','physical-station'))
-                if owner=='physical-station':
+                owner=str(payload.pop('owner_id','admin'))
+                if owner=='admin':
                     submit(ingest_physical_batch([payload]))
                 else:
                     row=normalize_row(payload,'esp32',sensor_id=str(payload.get('sensor_id','ESP32-ADXL345')))
@@ -1117,7 +1244,7 @@ def start_mqtt():
         except Exception as e:
             print('[MQTT] message error:',e)
 
-    c=mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,client_id=f'nexis-cloud-{uuid.uuid4().hex[:8]}')
+    c=mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,client_id=f'nexis-v43-{uuid.uuid4().hex[:8]}')
     c.on_connect=on_connect
     c.on_message=on_message
     c.reconnect_delay_set(min_delay=1,max_delay=10)

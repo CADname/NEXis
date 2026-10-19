@@ -88,6 +88,22 @@ The evaluation uses **leave-one-file-out (LOFO)** validation so windows from the
 - **Connects the full physical path** from sensors and motor control to cloud ingestion, AI inference, storage, browser UI, and digital twin.
 - **Includes reproducible evidence**: physical CSV recordings, training code, model artifact, raw evaluation outputs, and CI validation.
 
+## AI Inspection Agent - NVIDIA Nemotron 3 Ultra
+
+NEXis includes a **read-only AI Inspection Agent** built with **NVIDIA Nemotron 3 Ultra**, served through **Nebius Token Factory**. It assists with rotating-machine trial inspections by interpreting sensor measurements alongside the existing RandomForest fault classifier. The model is a conversational advisor; the deterministic RandomForest remains responsible for class prediction.
+
+![NEXis Nemotron AI Inspection Agent with Recorded Demo evidence table](docs/images/nexis_nemotron_agent_demo.png)
+
+*Agent screenshot: a Recorded Demo replay snapshot, classification history and evidence table. This is replay evidence, not live machine telemetry.*
+
+- **Conversational interface:** natural-language questions, contextual follow-ups and reports on request (conversation history is held in memory, not durably stored across app restarts)
+- **Read-only tools:** sensor snapshot, recent predictions, sensor statistics, inspection events, vision status (Physical Station only) and trial-recording metadata
+- **Workspace separation:** Recorded Demo uses replay data; Physical Station uses live ESP32 measurements
+- **Evidence-aware reasoning:** reviews RPM, vibration, motor current and model outputs; distinguishes observed predictions from confirmed physical faults
+- **Safety:** the model has no motor-control tool and cannot authorize shipment or substitute for independent safety protection
+
+The Nemotron key remains server-side and is **not included** in this repository. See [AI Agent technical notes](docs/NEMOTRON_AGENT.md) for architecture and configuration.
+
 ## Physical inspection stack
 
 | Layer | Implementation |

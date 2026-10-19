@@ -1,0 +1,92 @@
+/* NEXis AI Agent v3: standalone workspace, scoped styles. */
+.nexis-agent-page{padding-bottom:22px}
+.agent-page-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:18px;margin:6px 0 21px}
+.agent-page-head h2{font-size:25px;line-height:1.2;margin:7px 0 7px;color:#f0f7fc}
+.agent-page-head p{font-size:13px;color:#94aabd;margin:0}
+.agent-page-badges{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.agent-model-name{padding:9px 13px;border:1px solid #3d5267;border-radius:999px;color:#b6c9d8;font-size:12px;font-weight:700}
+.agent-state{padding:9px 13px;border:1px solid #7b6245;border-radius:999px;color:#deb77b;background:#362b1c80;font-size:12px;font-weight:700;white-space:nowrap}
+.agent-state.ready{border-color:#268568;color:#4fdbac;background:#103e3080}
+.agent-page-grid{display:grid;grid-template-columns:minmax(270px,0.85fr) minmax(440px,1.6fr);gap:18px;align-items:stretch}
+.agent-page-grid .panel{min-width:0;margin:0;display:flex;flex-direction:column;min-height:550px;overflow:hidden}
+.agent-panel-title{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 21px;border-bottom:1px solid rgba(115,145,165,.17)}
+.agent-panel-title small{color:#829fb5;font-size:10px;letter-spacing:.12em;font-weight:800}
+.agent-panel-title h3{font-size:17px;margin:5px 0 0;color:#f2f7fb}
+.agent-panel-title .op-button{font-size:12px}
+.agent-readonly-tag{font-size:11px;font-weight:700;white-space:nowrap;color:#88bbdc;border:1px solid #44657a;border-radius:99px;padding:7px 11px}
+.agent-event-list{display:flex;flex:1;flex-direction:column;gap:9px;overflow-y:auto;padding:16px 20px;max-height:490px}
+.agent-event{background:#0e2030;border:1px solid #294256;border-radius:10px;padding:13px;display:flex;flex-direction:column;gap:7px}
+.agent-event b{font-size:13px;color:#e2edf5}.agent-event small{font-size:11px;color:#95adbf}
+.agent-event p{font-size:12px;line-height:1.55;white-space:pre-wrap;color:#b5c7d3;margin:0;max-height:200px;overflow:auto}
+.agent-reanalyze{align-self:flex-start;color:#75c8fe;background:#122c40;border:1px solid #3e6179;padding:7px 10px;border-radius:7px;cursor:pointer}
+.agent-notice{font-size:12px;color:#a2b6c6;line-height:1.7;margin:10px 0}
+.agent-evidence-footer{margin-top:auto;padding:13px 19px;border-top:1px solid #263b4c;font-size:11px;color:#7e98aa;line-height:1.6}
+.agent-messages{flex:1;display:flex;flex-direction:column;gap:15px;overflow-y:auto;padding:20px;min-height:280px;max-height:580px}
+.agent-empty{margin:auto;text-align:center;max-width:370px;color:#9bb1c2}
+.agent-empty-icon{display:grid;place-items:center;margin:0 auto 15px;width:50px;height:50px;font-size:24px;border:1px solid #36627e;border-radius:15px;color:#71c6ff;background:#17334a}
+.agent-empty strong{display:block;font-size:16px;color:#dce9f1;margin-bottom:8px}
+.agent-empty p{font-size:12px;line-height:1.7}
+.agent-message{border:1px solid #2c4657;border-radius:11px;padding:13px 15px;line-height:1.65;white-space:pre-wrap;font-size:13px;overflow-wrap:anywhere;max-width:94%}
+.agent-message small{display:block;margin-bottom:5px;font-size:10px;letter-spacing:.06em;color:#91aec4}
+.agent-message small:last-child:not(:first-child){margin:10px 0 0;color:#81bbc8}
+.agent-message p{margin:0;white-space:pre-wrap}
+.agent-user{align-self:flex-end;background:#173b5b;border-color:#285987}
+.agent-assistant{align-self:flex-start;background:#12362f;border-color:#286a55}
+.agent-error{background:#3c2020;color:#ffbaba;border-color:#904949;align-self:flex-start}
+.agent-shortcuts{display:flex;gap:9px;flex-wrap:wrap;padding:10px 19px 8px;border-top:1px solid #263b4c}
+.agent-suggestion{border:1px solid #355066;border-radius:8px;background:#162c3c;color:#b7cee2;cursor:pointer;padding:8px 11px;font-size:11px}
+.agent-suggestion:hover{border-color:#5ea7d5;color:#fff}
+.agent-form{display:flex;align-items:end;gap:10px;padding:8px 18px 5px}
+.agent-form textarea{min-width:0;flex:1;min-height:66px;max-height:140px;resize:vertical;background:#0c1d2b;border:1px solid #37546c;color:#e0edf6;border-radius:10px;font:inherit;font-size:13px;padding:13px}
+.agent-form button{white-space:nowrap;min-height:45px;padding:0 20px}
+.agent-disclaimer{font-size:10px;color:#7893a6;line-height:1.5;padding:0 19px 15px;margin:0}
+.agent-owner-login-backdrop{position:fixed;inset:0;z-index:3000;display:flex;align-items:center;justify-content:center;background:rgba(4,12,21,.78);backdrop-filter:blur(5px);padding:15px}
+.agent-owner-login-backdrop.hidden{display:none!important}
+.agent-owner-login{position:relative;width:min(410px,100%);padding:30px;border:1px solid #385569;border-radius:17px;background:#102332;box-shadow:0 18px 70px #0008;color:#e7f0f6;display:flex;flex-direction:column;gap:12px}
+.agent-owner-login h3{font-size:22px;margin:0}.agent-owner-login p{color:#9ab0c2;font-size:12px;line-height:1.6;margin:0 0 5px}
+.agent-owner-login label{font-size:12px;font-weight:700}.agent-owner-login input{height:44px;background:#0b1b27;border:1px solid #4d6b7c;border-radius:9px;color:white;padding:0 12px}
+.agent-owner-login .agent-login-error{min-height:16px;color:#ff9b98}.agent-owner-login button[type=submit]{min-height:43px}
+.agent-owner-close{position:absolute;top:12px;right:15px;border:0;background:transparent;color:#9ab1be;font-size:26px;cursor:pointer}
+@media(max-width:1050px){.agent-page-grid{grid-template-columns:minmax(0,1fr)}.agent-page-grid .panel{min-height:300px}.agent-event-list{max-height:270px}.agent-messages{min-height:330px}}
+@media(max-width:560px){.agent-page-head h2{font-size:20px}.agent-panel-title{padding:14px}.agent-messages{padding:12px}.agent-form{flex-direction:column;align-items:stretch}.agent-shortcuts{padding:12px}.agent-form textarea{width:100%}}
+
+#agentOwnerLoginOpen[hidden]{display:none!important}
+
+/* v4: central sign-in before choosing Physical Station / Recorded Demo */
+.nexis-first-login{position:fixed;inset:0;z-index:2100;display:flex;align-items:center;justify-content:center;overflow:auto;background:radial-gradient(ellipse at 50% 20%,#153245 0%,#07121e 56%,#050d16 100%);padding:20px}
+.nexis-first-login.hidden{display:none!important}
+.nexis-login-card{width:min(455px,100%);display:flex;flex-direction:column;gap:10px;border:1px solid #34546a;border-radius:19px;background:#102331;padding:32px;box-shadow:0 24px 88px #0008;color:#e9f1f8}
+.nexis-login-logo{max-width:150px;max-height:54px;object-fit:contain;object-position:left;margin:0 0 12px}
+.nexis-login-kicker{font-size:11px;font-weight:800;letter-spacing:.14em;color:#77bce2}
+.nexis-login-card h1{font-size:33px;line-height:1.2;margin:0;color:#f5faff}
+.nexis-login-card p{font-size:13px;line-height:1.6;color:#a0b8c8;margin:2px 0 12px}
+.nexis-login-card label{font-size:13px;font-weight:800;color:#e8f2fa}
+.nexis-login-card input{width:100%;min-width:0;height:48px;background:#0a1b29;border:1px solid #456478;border-radius:9px;padding:0 13px;color:#fff;font:inherit;font-size:15px}
+.nexis-login-card input:focus{outline:2px solid #5faee7;outline-offset:1px}
+.nexis-login-card .nexis-login-error{color:#ff9c9c;min-height:18px;margin:0;font-size:12px}
+.nexis-login-card button[type=submit]{height:50px;background:#2177bb;border:1px solid #469ee0;border-radius:9px;color:white;font-weight:800;font-size:15px;cursor:pointer}
+.nexis-login-card button:disabled{opacity:.55;cursor:wait}
+.nexis-selector-actions{display:flex;justify-content:flex-end;padding:8px 18px 18px}
+.nexis-selector-actions button{color:#a8cee9;border:1px solid #365774;border-radius:7px;background:#173247;padding:8px 16px;cursor:pointer}
+@media(max-width:520px){.nexis-login-card{padding:24px 18px}.nexis-login-card h1{font-size:28px}}
+
+/* v5: readable, horizontally scrollable and HTML-safe AI reports */
+.agent-assistant{width:100%;max-width:100%;min-width:0;white-space:normal}
+.agent-message .agent-md{white-space:normal;min-width:0;line-height:1.65;overflow-wrap:anywhere}
+.agent-md h2,.agent-md h3,.agent-md h4,.agent-md h5{color:#e8f9f5;font-weight:800;line-height:1.35;margin:1.1em 0 .5em}
+.agent-md h2{font-size:17px}.agent-md h3{font-size:15px}.agent-md h4,.agent-md h5{font-size:14px}
+.agent-md p{margin:0 0 11px;white-space:normal}
+.agent-md ul,.agent-md ol{padding-left:22px;margin:5px 0 14px}
+.agent-md li{padding:2px 0}
+.agent-md blockquote{margin:12px 0;padding:10px 14px;border-left:3px solid #5fbb9c;background:#183f35;color:#cdebe2}
+.agent-md blockquote p{margin:0 0 5px}
+.agent-md code{background:#102329;border:1px solid #2d625b;padding:1px 4px;border-radius:4px;white-space:break-spaces}
+.agent-md pre{padding:12px;background:#091e25;overflow:auto;max-width:100%;border-radius:8px}
+.agent-md pre code{border:0;background:transparent;white-space:pre}
+.agent-md-table-wrap{display:block;max-width:100%;overflow-x:auto;margin:12px 0 18px;border:1px solid #365e58;border-radius:9px}
+.agent-md-table{width:100%;min-width:440px;border-collapse:collapse;font-size:12px;line-height:1.45;text-align:left}
+.agent-md-table th,.agent-md-table td{padding:10px 12px;border-right:1px solid #34574f;border-bottom:1px solid #34574f;vertical-align:top;white-space:normal;overflow-wrap:break-word}
+.agent-md-table th{background:#234b40;color:#e7fff5;font-weight:800}
+.agent-md-table tr:nth-child(even) td{background:#183b32}
+.agent-md-table tr:last-child td{border-bottom:0}
+.agent-md-table th:last-child,.agent-md-table td:last-child{border-right:0}
