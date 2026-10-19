@@ -36,7 +36,8 @@ ENCODING_ARTIFACTS = {
 }
 ENCODING_QQ_SUFFIXES = {'.md', '.html', '.txt'}
 PROJECT_VERSION_PATH = re.compile(r'(?i)(?:^|[/_-])v?\d+_\d+_\d+(?:[/_.-]|$)')
-RELEASE_TEXT = re.compile(r'(?i)(?:\bv\d+\.\d+(?:\.\d+)?\b|[?&]v=\d+\.\d+(?:\.\d+)?)')
+# Cache-busting query strings such as ?v=5.8.7 are asset URLs, not project release labels.
+RELEASE_TEXT = re.compile(r'(?i)\bv\d+\.\d+(?:\.\d+)?\b')
 
 REQUIRED = [
     'README.md',
@@ -147,14 +148,21 @@ def main() -> int:
                 failures.append(f'{key} must remain an explicit placeholder in .env.example')
 
     main_py = (ROOT / 'app/main.py').read_text(encoding='utf-8', errors='ignore') if (ROOT / 'app/main.py').exists() else ''
-    for removed in ('/api/login', '/api/guest', 'ADMIN_PASSWORD', 'ADMIN_USER'):
-        if removed in main_py:
-            failures.append(f'removed authentication residue remains in app/main.py: {removed}')
+    # The live demo now uses a sign-in-first flow. Validate the protections,
+    # rather than rejecting all authentication routes as obsolete.
+    for required in ("@app.post('/api/login')", "hmac.compare_digest(password,ADMIN_PASSWORD)",
+                     "@app.post('/api/guest')", "session_from_request(req)"):
+        if required not in main_py:
+            failures.append(f'login protection missing from app/main.py: {required}')
+    if "ADMIN_PASSWORD=os.getenv('ADMIN_PASSWORD','')" not in main_py:
+        failures.append('ADMIN_PASSWORD must be configured privately, without a default password')
+    if not re.search(r"@app\.post\('/api/guest'\)\s*\ndef\s+guest\(\):\s*(?:#.*\n\s*)?raise HTTPException\(403,", main_py):
+        failures.append('legacy guest entry must explicitly reject unauthenticated access')
 
     web_js = (ROOT / 'app/web/assets/app.js').read_text(encoding='utf-8', errors='ignore') if (ROOT / 'app/web/assets/app.js').exists() else ''
-    for removed in ("/api/logout", "role==='admin'", "Only administrators can control"):
-        if removed in web_js:
-            failures.append(f'removed authentication residue remains in app/web/assets/app.js: {removed}')
+    for required in ("'/api/login'", "'/api/logout'", "showWorkspaceSelector()"):
+        if required not in web_js:
+            failures.append(f'login UI wiring missing from app/web/assets/app.js: {required}')
     for implicit_locale in ('toLocaleString()', 'toLocaleTimeString()', 'toLocaleDateString()'):
         if implicit_locale in web_js:
             failures.append(f'implicit browser locale remains in app/web/assets/app.js: {implicit_locale}')
